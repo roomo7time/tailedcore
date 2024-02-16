@@ -285,7 +285,7 @@ def analyze_gaps(gaps, masks, class_names, class_sizes, save_dir, plot_self_sim=
     if plot_self_sim:
         self_sim = class_size.compute_self_sim(gaps)
         _anomaly_labels = anomaly_labels.to(torch.bool).tolist()
-        _few_shot_labels = (class_sizes <= 20).tolist()
+        _few_shot_labels = (class_sizes < 20).tolist()
 
         self_sim_abnormal_plot_dir = os.path.join(save_dir, "self_sim_abnormal")
         self_sim_few_shot_plot_dir = os.path.join(save_dir, "self_sim_few_shot")
