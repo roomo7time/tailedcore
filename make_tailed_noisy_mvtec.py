@@ -167,30 +167,6 @@ def _select_tailed_noises(
     return tailed_files, noisy_files
 
 
-def _make_class_info(
-    class_list,
-    train_files,
-    anomaly_files,
-    noise_ratio,
-    tail_type,
-    tail_k,
-    tail_class_ratio,
-    noise_on_tail,
-):
-    if tail_type == "step":
-        return _make_class_info_step_tail(
-            class_list,
-            train_files,
-            anomaly_files,
-            noise_ratio,
-            tail_k,
-            tail_class_ratio,
-            noise_on_tail,
-        )
-    elif tail_type == "pareto":
-        return _make_class_info_pareto_tail(class_list, train_files, noise_ratio)
-
-
 def _make_class_info_pareto_tail(
     class_list, train_files, noise_ratio, n_iter=100, noise_on_tail=True
 ):
@@ -218,26 +194,49 @@ def _make_class_info_pareto_tail(
     for i, class_name in enumerate(train_files.keys()):
         num_tail_samples[class_name] = target_num_class_samples[i]
 
+    min_size = 20
+    if noise_on_tail:
+        min_size = 1
     total_num_noise_samples = round(total_num_tail_samples * noise_ratio)
-    num_noise_samples = sample_keys_from_dict_of_int(
-        num_tail_samples, total_num_noise_samples
+    num_noise_samples = sample_name2size(
+        num_tail_samples, total_num_noise_samples, min_size
     )
 
     return num_tail_samples, num_noise_samples, []
 
 
-def sample_keys_from_dict_of_int(d, n_samples):
-    # Flatten the dictionary: [(key, value), ...]
-    flattened = [(key, "") for key, value in d.items() for _ in range(value)]
+# def sample_keys_from_dict_of_int(d, n_samples):
+#     # Flatten the dictionary: [(key, value), ...]
+#     flattened = [(key, "") for key, value in d.items() for _ in range(value)]
 
-    # Randomly sample n_samples elements from the flattened list
-    sampled = random.sample(flattened, n_samples)
+#     # Randomly sample n_samples elements from the flattened list
+#     sampled = random.sample(flattened, n_samples)
+
+#     # Extract and return keys and values of the sampled elements
+#     num_samples_by_keys = defaultdict(int)
+
+#     for key, _ in sampled:
+#         num_samples_by_keys[key] += 1
+#     return dict(num_samples_by_keys)
+
+def sample_name2size(name2size, n_samples, min_size=20):
+    # Flatten the dictionary: [(key, value), ...]
+    flattened = [(key, value) for key, value in name2size.items() for _ in range(value)]
+
+    random.shuffle(flattened)
 
     # Extract and return keys and values of the sampled elements
     num_samples_by_keys = defaultdict(int)
 
-    for key, _ in sampled:
-        num_samples_by_keys[key] += 1
+    counter = 0
+    for class_name, class_size in flattened:
+        if class_size >= min_size:
+            num_samples_by_keys[class_name] += 1
+            counter += 1
+        
+        if counter == n_samples:
+            break
+
     return dict(num_samples_by_keys)
 
 
