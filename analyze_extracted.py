@@ -24,7 +24,7 @@ from src.backbone import get_backbone
 from src.feature_embedder import FeatureEmbedder
 
 from src.patch_maker import PatchMaker
-from src.sampler import LOFSampler
+from src.sampler import LOFSampler, TailSampler
 
 
 def analyze_extracted(args):
@@ -61,20 +61,70 @@ def analyze_extracted(args):
     class_names = extracted["class_names"]
     class_sizes = extracted["class_sizes"]
 
-    gaps_dir = os.path.join(save_train_dir_path, "gaps")
-    feas_dir = os.path.join(save_train_dir_path, "feas")
+    # analyze_gap(
+    #     gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
+    # )
+    analyze_patch(feas, masks, class_names, save_train_dir_path, save_plot=False)
 
-    # analyze_gaps(gaps, masks, class_names, class_sizes, gaps_dir, plot_self_sim=False)
-    analyze_feas(feas, masks, class_names, feas_dir, plot_self_sim=False)
+
+def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=False):
+
+    if gaps.ndim == 4:
+        gaps = gaps[:, :, 0, 0]
+
+    class_labels, class_label_names = _convert_class_names_to_labels(class_names)
+    is_anomaly_gt = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
+
+    _evaluate_tail_class_detection(
+        gaps=gaps,
+        class_sizes_gt=class_sizes,
+        is_anomaly_gt=is_anomaly_gt,
+        save_dir=save_dir,
+    )
+
+    # FIXME:
+    save_plot = False
+    if save_plot:
+
+        save_plot_dir = os.path.join(save_dir, "plot_gap")
+
+        self_sim = class_size.compute_self_sim(gaps)
+        _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
+        _few_shot_labels = (class_sizes < 20).tolist()
+
+        self_sim_abnormal_plot_dir = os.path.join(save_plot_dir, "self_sim_abnormal")
+        self_sim_few_shot_plot_dir = os.path.join(save_plot_dir, "self_sim_few_shot")
+        self_sim_else_plot_dir = os.path.join(save_plot_dir, "self_sim_else")
+        os.makedirs(self_sim_abnormal_plot_dir, exist_ok=True)
+        os.makedirs(self_sim_few_shot_plot_dir, exist_ok=True)
+        os.makedirs(self_sim_else_plot_dir, exist_ok=True)
+
+        def plot_gap_self_sim(index):
+            print(f"plotting ngap for {index}")
+            _scores = self_sim[index]
+            _is_anomaly = _anomaly_labels[index]
+            _is_few_shot = _few_shot_labels[index]
+            if _is_anomaly:
+                _filename = os.path.join(self_sim_abnormal_plot_dir, f"{index:04d}.jpg")
+            elif _is_few_shot:
+                _filename = os.path.join(self_sim_few_shot_plot_dir, f"{index:04d}.jpg")
+            else:
+                _filename = os.path.join(self_sim_else_plot_dir, f"{index:04d}.jpg")
+            plot_scatter(
+                _scores,
+                class_labels,
+                class_label_names,
+                is_anomaly_gt,
+                th=np.cos(np.pi/4),
+                filename=_filename,
+            )
+
+        Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
 
 
-def analyze_feas(feas: torch.Tensor, masks, class_names, save_dir, plot_self_sim=False):
-
-    save_dir_normal = os.path.join(save_dir, "self_sim", "normal")
-    save_dir_abnormal = os.path.join(save_dir, "self_sim", "abnormal")
-
-    os.makedirs(save_dir_normal, exist_ok=True)
-    os.makedirs(save_dir_abnormal, exist_ok=True)
+def analyze_patch(
+    feas: torch.Tensor, masks, class_names, save_dir, save_plot=False
+):
 
     downsized_masks = _downsize_masks(masks, mode="bilinear")
 
@@ -84,41 +134,28 @@ def analyze_feas(feas: torch.Tensor, masks, class_names, save_dir, plot_self_sim
     n, fea_dim, h, w = feas.shape
 
     label_names = ["normal", "abnormal"]
-    anomaly_gt_scores = downsized_masks.reshape((-1))
-    is_anomaly_gt = torch.round(anomaly_gt_scores).to(torch.long)
+    anomaly_patch_scores_gt = downsized_masks.reshape((-1))
+    is_anomaly_patch_gt = torch.round(anomaly_patch_scores_gt).to(torch.long)
     feature_map_shape = feas.shape[2:]
     features = (
-        feas.reshape((feas.shape[0], feas.shape[1], -1)).permute(0, 2, 1).reshape((-1, fea_dim))
+        feas.reshape((feas.shape[0], feas.shape[1], -1))
+        .permute(0, 2, 1)
+        .reshape((-1, fea_dim))
     )
 
-    _, csc_idxes = class_size.sample_few_shot(
-        features, feature_map_shape, th_type="indep"
+    _evaluate_anomaly_patch_detection(
+        is_anomaly_patch_gt, features, feature_map_shape, save_dir
     )
-    _, lofcsp_idxes = LOFSampler().run(features, feature_map_shape, augment_class_sizes=True)
-    _, lof_idxes = LOFSampler().run(features, feature_map_shape)
-    
 
-    # is_anomaly_csc = convert_indices_to_bool(len(features), csc_idxes)
-    is_anomaly_lof = 1 - convert_indices_to_bool(len(features), lof_idxes)
-    is_anomaly_lofcsp = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
+    # FIXME: bug fix is required
+    save_plot = False
+    if save_plot:
+        save_dir_normal = os.path.join(save_dir, "self_sim", "normal")
+        save_dir_abnormal = os.path.join(save_dir, "self_sim", "abnormal")
 
-    is_missing_anomaly_lof = (is_anomaly_lof - is_anomaly_gt) < 0
-    is_missing_normal_lof = (is_anomaly_lof - is_anomaly_gt) > 0
-    num_missing_anomaly_lof = is_missing_anomaly_lof.sum().item()
-    num_missing_normal_lof = is_missing_normal_lof.sum().item()
-    print(f"LOF - num. of missing anomaly pixels: {num_missing_anomaly_lof}")
-    print(f"LOF - num. of missing normal pixels: {num_missing_normal_lof}")
+        os.makedirs(save_dir_normal, exist_ok=True)
+        os.makedirs(save_dir_abnormal, exist_ok=True)
 
-    is_missing_anomaly_lofcsp = (is_anomaly_lofcsp - is_anomaly_gt) < 0
-    is_missing_normal_lofcsp = (is_anomaly_lofcsp - is_anomaly_gt) > 0
-    num_missing_anomaly_lofcsp = is_missing_anomaly_lofcsp.sum().item()
-    num_missing_normal_lofcsp = is_missing_normal_lofcsp.sum().item()
-    print(f"lofcsp - num. of missing anomaly pixels: {num_missing_anomaly_lofcsp}")
-    print(f"lofcsp - num. of missing normal pixels: {num_missing_normal_lofcsp}")
-
-    
-
-    if plot_self_sim:
         th = np.cos(np.pi / 8)  # FIXME: tmp
         pixelwise_gt_scores = pixelwise_gt_scores.numpy()
         pixelwise_labels = pixelwise_labels.numpy()
@@ -159,11 +196,148 @@ def analyze_feas(feas: torch.Tensor, masks, class_names, save_dir, plot_self_sim
         Parallel(n_jobs=-1)(delayed(plot_pixelwise_self_sim)(p, i) for p, i in pi_pairs)
 
 
+def _evaluate_anomaly_patch_detection(
+    is_anomaly_patch_gt, features, feature_map_shape, save_dir
+) -> dict:
+
+    # method_names = ["scs-indep-mean", "lof", "lof-scs-indep-mean"]
+    # method_names = ["lof-scs-indep-mean"]
+    method_names = ["lof"]
+    results = []
+    for method_name in method_names:
+        _result = _get_result_anomaly_patch_detection(
+            method_name, is_anomaly_patch_gt, features, feature_map_shape
+        )
+        results.append(_result)
+
+    df = utils.save_dicts_to_csv(
+        results, filename=os.path.join(save_dir, "result_patch.csv")
+    )
+    utils.print_df(df)
 
 
+def _get_result_anomaly_patch_detection(
+    method_name, is_anomaly_patch_gt, features, feature_map_shape
+):
+
+    if method_name == "scs-indep-mean":
+        _, scs_idxes = class_size.sample_few_shot(
+            features, feature_map_shape, th_type="indep"
+        )
+        is_anomaly_patch_pred = convert_indices_to_bool(len(features), scs_idxes)
+    elif method_name == "lof":
+        _, lof_idxes = LOFSampler().run(features, feature_map_shape)
+        is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lof_idxes)
+    elif method_name == "lof-scs-indep-mean":
+        _, lofcsp_idxes = LOFSampler().run(
+            features, feature_map_shape, augment_class_sizes=True
+        )
+        is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
+    else:
+        raise NotImplementedError()
+
+    is_missing_anomaly_patch = (is_anomaly_patch_pred - is_anomaly_patch_gt) < 0
+    is_missing_normal_patch = (is_anomaly_patch_pred - is_anomaly_patch_gt) > 0
+    num_missing_anomaly_patch = is_missing_anomaly_patch.sum().item()
+    num_missing_normal_patch = is_missing_normal_patch.sum().item()
+
+    _result = {
+        "method": method_name,
+        "num_missing_anomaly_patch": num_missing_anomaly_patch,
+        "num_missing_normal_patch": num_missing_normal_patch,
+    }
+
+    return _result
+
+
+def _evaluate_tail_class_detection(
+    gaps: torch.Tensor,
+    class_sizes_gt: torch.Tensor,
+    is_anomaly_gt: torch.Tensor,
+    save_dir: str,
+):
+
+    # method_names = [
+    #     "lof",
+    #     "lof_scs-indep-mean",
+    #     "scs-symmin-mean",
+    #     "scs-symmin-mode",
+    #     "scs-symmin-nearest",
+    #     "scs-symavg-mean",
+    #     "scs-symavg-mode",
+    #     "scs-symavg-nearest",
+    #     "scs-indep-mean",
+    #     "scs-indep-mode",
+    #     "scs-indep-nearest",
+    # ]
+
+    method_names = [
+        "lof_scs-indep-mean",
+    ]
+
+    results = []
+    for method_name in method_names:
+        _result = _get_result_tail_class_detection(
+            method_name=method_name,
+            class_sizes_gt=class_sizes_gt,
+            is_anomaly_gt=is_anomaly_gt,
+            gaps=gaps,
+        )
+        results.append(_result)
+
+    df = utils.save_dicts_to_csv(
+        results, filename=os.path.join(save_dir, "result_gap.csv")
+    )
+
+    utils.print_df(df)
+
+
+def _get_result_tail_class_detection(
+    method_name,
+    class_sizes_gt,
+    is_anomaly_gt,
+    gaps,
+):
+    
+    method_parts = method_name.split("-")
+    method_class = method_parts[0]
+
+    if method_name == "lof":
+        lof_sampler = LOFSampler()
+        _, head_indices = lof_sampler.run(gaps)
+        is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
+        is_tail_pred = 1 - is_head_pred
+    elif method_name == "lof_scs-indep-mean":
+        lof_sampler = LOFSampler()
+        _, head_indices = lof_sampler.run(gaps, augment_class_sizes=True)
+        is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
+        is_tail_pred = 1 - is_head_pred
+    elif method_class == "scs":
+        th_type = method_parts[1]
+        vote_type = method_parts[2]
+        tail_sampler = TailSampler(th_type=th_type, vote_type=vote_type)
+        _, tail_indices = tail_sampler.run(gaps)
+        is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
+    else:
+        raise NotImplementedError()
+
+    is_tail_gt = (class_sizes_gt <= 20).to(torch.long)
+
+    is_missing_tail = (is_tail_pred - is_tail_gt) < 0
+    is_included_anomaly = (is_tail_pred + is_anomaly_gt) > 1
+
+    num_missing_tail = is_missing_tail.sum().item()
+    num_included_anomaly = is_included_anomaly.sum().item()
+
+    return {
+        "method": method_name,
+        "num_missing_tail": num_missing_tail,
+        "num_included_anomaly": num_included_anomaly,
+    }
 
 
 _patchmaker = PatchMaker(patchsize=3, stride=1)
+
 
 def _patchify(masks):
     _shape = masks.shape
@@ -245,78 +419,6 @@ def _convert_class_names_to_labels(class_names):
     return class_labels, class_label_names
 
 
-def analyze_gaps(gaps, masks, class_names, class_sizes, save_dir, plot_self_sim=False):
-
-    if gaps.ndim == 4:
-        gaps = gaps[:, :, 0, 0]
-
-    class_labels, class_label_names = _convert_class_names_to_labels(class_names)
-    anomaly_labels = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
-
-    th_types = ["sym-min", "sym-avg", "random-approx", "indep"]
-    vote_types = ["mean", "mode", "mean-nearest"]
-    results = []
-
-    results.append(
-        _get_result_lof(gaps, class_sizes, anomaly_labels, augment_class_sizes=True)
-    )
-    results.append(_get_result_lof(gaps, class_sizes, anomaly_labels))
-
-    for th_type in th_types:
-        for vote_type in vote_types:
-            print(f"th_type: {th_type}, vote_type: {vote_type}")
-            _result = _get_result_csc(
-                gaps,
-                class_sizes_gt=class_sizes,
-                anomaly_labels=anomaly_labels,
-                vote_type=vote_type,
-                th_type=th_type,
-            )
-            _result["vote_type"] = vote_type
-            _result["th_type"] = th_type
-            _result["method"] = "csc"
-
-            results.append(_result)
-
-    df = utils.save_dicts_to_csv(results, filename=os.path.join(save_dir, "result.csv"))
-
-    utils.print_df(df)
-
-    if plot_self_sim:
-        self_sim = class_size.compute_self_sim(gaps)
-        _anomaly_labels = anomaly_labels.to(torch.bool).tolist()
-        _few_shot_labels = (class_sizes < 20).tolist()
-
-        self_sim_abnormal_plot_dir = os.path.join(save_dir, "self_sim_abnormal")
-        self_sim_few_shot_plot_dir = os.path.join(save_dir, "self_sim_few_shot")
-        self_sim_else_plot_dir = os.path.join(save_dir, "self_sim_else")
-        os.makedirs(self_sim_abnormal_plot_dir, exist_ok=True)
-        os.makedirs(self_sim_few_shot_plot_dir, exist_ok=True)
-        os.makedirs(self_sim_else_plot_dir, exist_ok=True)
-
-        def plot_gap_self_sim(index):
-            print(f"plotting ngap for {index}")
-            _scores = self_sim[index]
-            _is_anomaly = _anomaly_labels[index]
-            _is_few_shot = _few_shot_labels[index]
-            if _is_anomaly:
-                _filename = os.path.join(self_sim_abnormal_plot_dir, f"{index:04d}.jpg")
-            elif _is_few_shot:
-                _filename = os.path.join(self_sim_few_shot_plot_dir, f"{index:04d}.jpg")
-            else:
-                _filename = os.path.join(self_sim_else_plot_dir, f"{index:04d}.jpg")
-            plot_scatter(
-                _scores,
-                class_labels,
-                class_label_names,
-                anomaly_labels,
-                th=ths["random-ideal"],
-                filename=_filename,
-            )
-
-        Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
-
-
 def _get_result_csc(
     gaps,
     class_sizes_gt,
@@ -339,12 +441,10 @@ def _get_result_csc(
     return _result
 
 
-def convert_indices_to_bool(n, indices: torch.Tensor):
+def convert_indices_to_bool(n: int, indices: torch.Tensor) -> torch.Tensor:
     bool_array = torch.zeros((n), dtype=torch.long)
     bool_array[indices] = 1
     return bool_array
-    
-
 
 
 def _get_result_lof(

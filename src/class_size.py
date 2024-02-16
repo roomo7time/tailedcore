@@ -7,7 +7,6 @@ from tqdm import tqdm
 
 from scipy.stats import mode
 
-
 def compute_self_sim(X: torch.Tensor, normalize: bool = True) -> torch.Tensor:
     if normalize:
         X = F.normalize(X, dim=-1)
@@ -38,7 +37,7 @@ def predict_class_sizes(self_sim: torch.Tensor, th, vote_type="mean") -> torch.T
         class_sizes = mode(
             count_map_naned, axis=0, nan_policy="omit"
         ).mode  # FIXME: what happens when there is no majority?
-    elif vote_type == "mean-nearest":
+    elif vote_type == "nearest":
         columnwise_means = (
             count_map.sum(dim=0, keepdim=True)
             / torch.count_nonzero(count_map, dim=0)[None, :]
@@ -53,7 +52,7 @@ def predict_class_sizes(self_sim: torch.Tensor, th, vote_type="mean") -> torch.T
 
 
 # FIXME: this function is not robust. needs to be revised
-def predict_num_samples_per_class(class_sizes: torch.Tensor) -> list:
+def predict_num_samples_per_class(class_sizes: torch.FloatTensor) -> list:
     # FIXME: topk average is required for robustness
     _class_sizes_sorted = torch.round(torch.sort(class_sizes, descending=True)[0]).to(torch.long)
     _class_sizes_sorted = torch.maximum(_class_sizes_sorted, torch.ones_like(_class_sizes_sorted))
@@ -128,20 +127,20 @@ def compute_sym_th(self_sim: torch.Tensor, mode="min", within=False) -> float:
     return th
 
 
-def _compute_th(self_sim: torch.Tensor, th_type="sym-min", within=False) -> float:
+def _compute_th(self_sim: torch.Tensor, th_type="symmin", within=False) -> float:
 
     _factor = 1
     if within:
         _factor = 2
 
-    if th_type == "sym-min":
+    if th_type == "symmin":
         th = compute_sym_th(self_sim, mode="min", within=within)
-    elif th_type == "sym-avg":
+    elif th_type == "symavg":
         th = compute_sym_th(self_sim, mode="avg", within=within)
-    elif th_type == "random-approx":
-        th = np.cos(
-            np.arccos(1 / np.sqrt(1024)) / 2
-        )  # FIXME: 1024 is hard-coded at the momoent; fix it
+    # elif th_type == "random-approx":
+    #     th = np.cos(
+    #         np.arccos(1 / np.sqrt(1024)) / 2
+    #     )  # FIXME: 1024 is hard-coded at the momoent; fix it
     elif th_type == "indep":
         th = np.cos(np.pi / (4*_factor))
     else:
@@ -263,7 +262,7 @@ def _sample_patchwise_few_shot(
     patchwise_class_sizes = torch.empty((b, num_pixels), dtype=torch.float)
     patchwise_few_shot_idxes = torch.empty((b, num_pixels), dtype=torch.long)
 
-    def _compute_pixelwise_few_shot_idxes(p):
+    def _compute_patchwise_few_shot_idxes(p):
         _self_sim = patchwise_self_sim[p]
         _th = compute_th(
             _self_sim,
@@ -280,8 +279,8 @@ def _sample_patchwise_few_shot(
         patchwise_few_shot_idxes[:, p] = _few_shot_idxes
         patchwise_class_sizes[:, p] = _class_sizes
 
-    for p in tqdm(range(num_pixels), desc="Computing pixelwise few-shot idxes"):
-        _compute_pixelwise_few_shot_idxes(p)
+    for p in tqdm(range(num_pixels), desc="Computing patchwise few-shot idxes"):
+        _compute_patchwise_few_shot_idxes(p)
 
     # Parallel(n_jobs=4)(delayed(_compute_pixelwise_few_shot_idxes)(p) for p in range(num_pixels))
     if return_class_sizes:

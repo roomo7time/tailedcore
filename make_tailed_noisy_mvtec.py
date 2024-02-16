@@ -29,12 +29,12 @@ _MVTEC_CLASS_LIST = [
 
 
 def make_data_step(
-    source_dir,
-    target_dir,
-    noise_ratio=0.1,
-    noise_on_tail=False,
-    tail_k=4,
-    tail_class_ratio=0.6,
+    source_dir: str,
+    target_dir: str,
+    noise_ratio: float = 0.1,
+    noise_on_tail: bool = False,
+    tail_k: int = 4,
+    tail_class_ratio: float = 0.6,
 ) -> None:
     class_list = _MVTEC_CLASS_LIST
     files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
@@ -60,10 +60,10 @@ def make_data_step(
 
 
 def make_data_pareto(
-    source_dir,
-    target_dir,
-    noise_ratio=0.1,
-    noise_on_tail=False,  # TODO: need to be implemented
+    source_dir: str,
+    target_dir: str,
+    noise_ratio: float = 0.1,
+    noise_on_tail: bool = False,  # TODO: need to be implemented
 ) -> None:
     class_list = _MVTEC_CLASS_LIST
     files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)

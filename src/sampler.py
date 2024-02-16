@@ -7,7 +7,7 @@ from typing import Union
 from tqdm import tqdm
 from copy import deepcopy
 from sklearn.neighbors import LocalOutlierFactor
-from . import class_size
+from . import class_size, utils
 
 
 class BaseSampler(abc.ABC):
@@ -338,36 +338,58 @@ class LOFSampler(BaseSampler):
     ):
         # if feature_map_shape is provided, patchwise
         reduced_features = self._reduce_features(features)
-        lof_scores = self._compute_lof_scores(reduced_features, 
-                                              feature_map_shape, 
-                                              augment_class_sizes)
+        lof_scores = self._compute_lof_scores(
+            reduced_features, feature_map_shape,
+        )
 
+        # # FIXME: new version is being implemented...
+        # # K must be independently handled for each patch.
+        # thresh = torch.quantile(lof_scores, self.percentage)
+        # sample_indices = torch.where(lof_scores < thresh)[0]
+
+        # if augment_class_sizes:
+        #     class_sizes = class_size.sample_few_shot(
+        #         features,
+        #         feature_map_shape,
+        #         th_type="indep",
+        #         return_class_sizes=True,
+        #     )
+
+        #     scores_by_class_sizes = 1 - class_sizes / class_sizes.max()
+        #     lof_scores *= scores_by_class_sizes
+
+        #     # FIXME: change to max step detection
+        #     num_samples_per_class = class_size.predict_num_samples_per_class(lof_scores)
+        #     K = class_size.predict_max_few_shot_class_size(num_samples_per_class)
+
+        #     sample_indices = torch.where(lof_scores <= K)[0].to(torch.long)
+
+        # TODO: recover this old version if necessary
+        if augment_class_sizes:
+            class_sizes = class_size.sample_few_shot(
+                reduced_features,
+                feature_map_shape,
+                th_type="indep",
+                return_class_sizes=True,
+            )
+
+            scores_by_class_sizes = 1 - class_sizes / class_sizes.max()
+            lof_scores *= scores_by_class_sizes
+        
         thresh = torch.quantile(lof_scores, self.percentage)
-
         sample_indices = torch.where(lof_scores < thresh)[0]
+        
         sample_features = features[sample_indices]
 
         return sample_features, sample_indices
 
-    def _compute_lof_scores(self, 
-                            features, 
-                            feature_map_shape=None, 
-                            augment_class_sizes=False):
+    def _compute_lof_scores(
+        self, features, feature_map_shape=None,
+    ):
         if feature_map_shape is not None:
             lof_scores = self._compute_patchwise_lof(features, feature_map_shape)
         else:
             lof_scores = self._compute_lof(features)
-        
-        if augment_class_sizes:
-            class_sizes = class_size.sample_few_shot(
-                features,
-                feature_map_shape,
-                th_type='indep',
-                return_class_sizes=True,
-            )
-        
-            scores_by_class_sizes = 1 - class_sizes/class_sizes.max()
-            lof_scores *= scores_by_class_sizes
 
         return lof_scores
 
@@ -418,21 +440,23 @@ class LOFSampler(BaseSampler):
         return reduced_features
 
 
-
 class TailSampler(BaseSampler):
     def __init__(
         self,
-        dimension_to_project_features_to=128,
+        dimension_to_project_features_to: int = 128,
         device: torch.device = torch.device("cpu"),
-        th_type: 'str' = 'indep',
-        vote_type: 'str' = 'mean',
-
+        th_type: "str" = "indep",
+        vote_type: "str" = "mean",
     ):
 
         self.dimension_to_project_features_to = dimension_to_project_features_to
         self.device = device
         self.th_type = th_type
         self.vote_type = vote_type
-    
-    def run(features, feature_map_shape):
-        return
+
+    def run(self, features: torch.Tensor, feature_map_shape: torch.Tensor = None):
+        _, few_shot_indices = class_size.sample_few_shot(
+            features, feature_map_shape, th_type=self.th_type, vote_type=self.vote_type
+        )
+
+        return features[few_shot_indices], few_shot_indices
