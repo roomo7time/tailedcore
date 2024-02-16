@@ -29,12 +29,12 @@ _MVTEC_CLASS_LIST = [
 
 
 def make_data_step(
-        source_dir,
-        target_dir,
-        noise_ratio=0.1,
-        noise_on_tail=False,
-        tail_k=4,
-        tail_class_ratio=0.6,
+    source_dir,
+    target_dir,
+    noise_ratio=0.1,
+    noise_on_tail=False,
+    tail_k=4,
+    tail_class_ratio=0.6,
 ) -> None:
     class_list = _MVTEC_CLASS_LIST
     files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
@@ -57,18 +57,18 @@ def make_data_step(
         num_noise_samples=num_noise_samples,
         head_classes=head_classes,
     )
-    
+
 
 def make_data_pareto(
     source_dir,
     target_dir,
     noise_ratio=0.1,
-    noise_on_tail=False,    # TODO: need to be implemented
+    noise_on_tail=False,  # TODO: need to be implemented
 ) -> None:
     class_list = _MVTEC_CLASS_LIST
     files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
-    num_tail_samples, num_noise_samples, head_classes = (
-        _make_class_info_pareto_tail(class_list, train_files, noise_ratio, noise_on_tail=noise_on_tail)
+    num_tail_samples, num_noise_samples, head_classes = _make_class_info_pareto_tail(
+        class_list, train_files, noise_ratio, noise_on_tail=noise_on_tail
     )
     _make_data(
         target_dir=target_dir,
@@ -100,9 +100,7 @@ def _make_data(
         head_classes=head_classes,
     )
 
-    file_mapper_tail = _make_file_mapper(
-        source_dir, target_dir, file_list=tailed_files
-    )
+    file_mapper_tail = _make_file_mapper(source_dir, target_dir, file_list=tailed_files)
     file_mapper_noise = _make_file_mapper(
         source_dir,
         target_dir,
@@ -143,12 +141,7 @@ def _get_mvtec_base_file_info(source_dir):
 
 
 def _select_tailed_noises(
-    files, 
-    train_files, 
-    anomaly_files, 
-    num_tail_samples, 
-    num_noise_samples, 
-    head_classes
+    files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes
 ):
     # select tailed samples
     tailed_files = {}
@@ -170,40 +163,6 @@ def _select_tailed_noises(
 
     tailed_files = [item for sublist in tailed_files.values() for item in sublist]
     noisy_files = [item for sublist in noisy_files.values() for item in sublist]
-
-    return tailed_files, noisy_files
-
-
-def _make_tailed_noisy_mvtec_file_list(
-    source_dir,
-    noise_ratio=0.1,
-    tail_type="step",  # 'step' or 'pareto'
-    tail_k=4,
-    tail_class_ratio=0.6,
-    noise_on_tail=False,
-):
-
-    files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
-
-    num_tail_samples, num_noise_samples, head_classes = _make_class_info(
-        _MVTEC_CLASS_LIST,
-        train_files,
-        anomaly_files,
-        noise_ratio,
-        tail_type,
-        tail_k,
-        tail_class_ratio,
-        noise_on_tail,
-    )
-
-    tailed_files, noisy_files = _select_tailed_noises(
-        files,
-        anomaly_files,
-        train_files,
-        num_tail_samples,
-        num_noise_samples,
-        head_classes,
-    )
 
     return tailed_files, noisy_files
 
@@ -232,7 +191,9 @@ def _make_class_info(
         return _make_class_info_pareto_tail(class_list, train_files, noise_ratio)
 
 
-def _make_class_info_pareto_tail(class_list, train_files, noise_ratio, n_iter=100, noise_on_tail=True):
+def _make_class_info_pareto_tail(
+    class_list, train_files, noise_ratio, n_iter=100, noise_on_tail=True
+):
 
     pareto_alpha = 6.0  # hard-coded
     target_class_dist = get_discrete_pareto_pmf(
@@ -483,27 +444,36 @@ def is_in_mvtec_train_folder(file_path, base_dir):
 if __name__ == "__main__":
 
     # arguments
-    tail_type = 'step'
-    # tail_type = "pareto"
+    # tail_type = "step"
+    tail_type = "pareto"
     seed = 0
 
     tail_k = 4  # 4 or 1
     noise_on_tail = False
+    noise_ratio = 0.1
 
     source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec_anomaly_detection"
-    target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_mvtec_{tail_type}_seed{seed}"
+    target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_mvtec_{tail_type}_nr{int(noise_ratio*100):02d}"
 
     if tail_type == "step" and tail_k is not None:
         target_dir += f"_k{tail_k}"
     if noise_on_tail:
         target_dir += f"_tailnoised"
 
+    target_dir += f"_seed{seed}"
+
     set_seed(seed)
     if tail_type == "step":
-        make_tailed_noisy_mvtec_step(
+        make_data_step(
             source_dir,
             target_dir,
             tail_k=tail_k,
+            noise_on_tail=noise_on_tail,
+        )
+    elif tail_type == "pareto":
+        make_data_pareto(
+            source_dir,
+            target_dir,
             noise_on_tail=noise_on_tail,
         )
 
