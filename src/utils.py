@@ -460,7 +460,7 @@ def plot_scores(
     plt.close()
 
 
-def save_dict(data, file_path):
+def save_dict(data: dict, file_path: str):
     dir_path = os.path.dirname(file_path)
     os.makedirs(dir_path, exist_ok=True)
     with open(file_path, "wb") as file:

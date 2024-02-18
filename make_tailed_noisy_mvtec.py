@@ -7,7 +7,7 @@ from scipy.stats import pareto
 from copy import deepcopy
 from collections import defaultdict
 
-from src.utils import set_seed, modify_subfolders_in_path
+from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict
 
 _MVTEC_CLASS_LIST = [
     "bottle",
@@ -27,6 +27,34 @@ _MVTEC_CLASS_LIST = [
     "zipper",
 ]
 
+_DATA_CONFIG_ROOT = './data_configs/utn'
+
+
+def _load_data_config(data_config_path):
+
+    data = load_dict(data_config_path)
+
+    files = data['files']
+    train_files = data['train_files']
+    anomaly_files = data['anomaly_files']
+    num_tail_samples = data['num_tail_samples']
+    num_noise_samples = data['num_noise_samples']
+    head_classes = data['head_classes']
+
+    return files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes
+
+def _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path):
+    data = {
+        "files": files,
+        "train_files": train_files,
+        "anomaly_files": anomaly_files,
+        "num_tail_samples": num_tail_samples,
+        "num_noise_samples": num_noise_samples,
+        "head_classes": head_classes,
+    }
+
+    save_dict(data, data_config_path)
+
 
 def make_data_step(
     source_dir: str,
@@ -35,18 +63,31 @@ def make_data_step(
     noise_on_tail: bool = False,
     tail_k: int = 4,
     tail_class_ratio: float = 0.6,
+    seed: int=0,
 ) -> None:
-    class_list = _MVTEC_CLASS_LIST
-    files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
-    num_tail_samples, num_noise_samples, head_classes = _make_class_info_step_tail(
-        class_list=class_list,
-        train_files=train_files,
-        anomaly_files=anomaly_files,
-        noise_ratio=noise_ratio,
-        tail_k=tail_k,
-        tail_class_ratio=tail_class_ratio,
-        noise_on_tail=noise_on_tail,
-    )
+    set_seed(seed)
+    data_config_path = os.path.join(_DATA_CONFIG_ROOT, f'step_nr{int(noise_ratio*100):02d}_k{tail_k}_seed{seed}.pkl')
+
+    if noise_on_tail:
+        data_config_path += f"_tailnoised"
+
+    if os.path.exists(data_config_path):
+        files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
+    else:
+
+        class_list = _MVTEC_CLASS_LIST
+        files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
+        num_tail_samples, num_noise_samples, head_classes = _make_class_info_step_tail(
+            class_list=class_list,
+            train_files=train_files,
+            anomaly_files=anomaly_files,
+            noise_ratio=noise_ratio,
+            tail_k=tail_k,
+            tail_class_ratio=tail_class_ratio,
+            noise_on_tail=noise_on_tail,
+        )
+
+        _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
 
     _make_data(
         target_dir=target_dir,
@@ -64,12 +105,26 @@ def make_data_pareto(
     target_dir: str,
     noise_ratio: float = 0.1,
     noise_on_tail: bool = False,  # TODO: need to be implemented
+    seed: int = 0,
 ) -> None:
-    class_list = _MVTEC_CLASS_LIST
-    files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
-    num_tail_samples, num_noise_samples, head_classes = _make_class_info_pareto_tail(
-        class_list, train_files, noise_ratio, noise_on_tail=noise_on_tail
-    )
+    
+    data_config_path = os.path.join(_DATA_CONFIG_ROOT, f'pareto_nr{int(noise_ratio*100):02d}.pkl')
+
+    if noise_on_tail:
+        data_config_path += f"_tailnoised"
+    
+    if os.path.exists(data_config_path):
+        files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
+    else:
+
+        class_list = _MVTEC_CLASS_LIST
+        files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
+        num_tail_samples, num_noise_samples, head_classes = _make_class_info_pareto_tail(
+            class_list, train_files, noise_ratio, noise_on_tail=noise_on_tail
+        )
+    
+        _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
+
     _make_data(
         target_dir=target_dir,
         files=files,
@@ -443,11 +498,11 @@ def is_in_mvtec_train_folder(file_path, base_dir):
 if __name__ == "__main__":
 
     # arguments
-    tail_type = "step"
-    # tail_type = "pareto"
+    # tail_type = "step"
+    tail_type = "pareto"
     seed = 0
 
-    tail_k = 4  # 4 or 1
+    tail_k = 1  # 4 or 1
     noise_on_tail = False
     noise_ratio = 0.1
 
@@ -468,12 +523,14 @@ if __name__ == "__main__":
             target_dir,
             tail_k=tail_k,
             noise_on_tail=noise_on_tail,
+            seed=seed,
         )
     elif tail_type == "pareto":
         make_data_pareto(
             source_dir,
             target_dir,
             noise_on_tail=noise_on_tail,
+            seed=seed,
         )
 
     compare_directories(
