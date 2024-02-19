@@ -55,16 +55,21 @@ class Engine:
         backbone = get_backbone(self.backbone_name)
 
         # FIXME: move inside to coreset (it depends on coreset model)
+        embedding_to_extract_from = None
+        if hasattr(self.config.model, 'embedding_to_extract_from'):
+            embedding_to_extract_from = self.config.model.embedding_to_extract_from 
         feature_embedder = FeatureEmbedder(
             device=self.device,
             input_shape=self.input_shape,
             backbone=backbone,
             layers_to_extract_from=self.config.model.layers_to_extract,
+            embedding_to_extract_from=embedding_to_extract_from
         )
 
         coreset_model = get_coreset_model(
-            self.config,
+            self.config.model,
             feature_embedder=feature_embedder,
+            imagesize=self.config.data.imagesize,
             device=self.device,
             faiss_on_gpu=self.faiss_on_gpu,
             faiss_num_workers=self.faiss_num_workers,
@@ -80,6 +85,7 @@ class Engine:
     # FIXME: refactor
     def _partition_train(self):
         backbone = get_backbone(self.backbone_name)
+        # FIXME: move inside to coreset (it depends on coreset model)
         feature_embedder = FeatureEmbedder(
             self.device, self.input_shape, backbone, self.config.model.layers_to_extract
         )

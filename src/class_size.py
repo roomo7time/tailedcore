@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from . import utils
 
 from scipy.stats import mode
 
@@ -51,45 +52,79 @@ def predict_class_sizes(self_sim: torch.Tensor, th, vote_type="mean") -> torch.T
     return class_sizes.to(torch.float)
 
 
-# FIXME: this function is not robust. needs to be revised
-def predict_num_samples_per_class(class_sizes: torch.FloatTensor) -> list:
+
+def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_sizes=True) -> torch.FloatTensor:
     # FIXME: topk average is required for robustness
-    _class_sizes_sorted = torch.round(torch.sort(class_sizes, descending=True)[0]).to(torch.long)
-    _class_sizes_sorted = torch.maximum(_class_sizes_sorted, torch.ones_like(_class_sizes_sorted))
-    class_sizes_sorted = _class_sizes_sorted.tolist()
+    if round_class_sizes:
+        class_sizes = torch.round(class_sizes).to(torch.long)
+    _class_sizes_sorted = torch.sort(class_sizes, descending=True)[0]
+    class_sizes_sorted = torch.maximum(_class_sizes_sorted, torch.ones_like(_class_sizes_sorted))
 
     num_samples_per_class = []
 
-    # FIXME: the below method might be modified or extended
     while len(class_sizes_sorted) > 0:
         _num_samples_in_current_class = min(
             class_sizes_sorted[0], len(class_sizes_sorted)
         )
+        _num_samples_in_current_class = torch.round(class_sizes_sorted[:_num_samples_in_current_class].float().mean()).long().item()
+        _num_samples_in_current_class = min(_num_samples_in_current_class, len(class_sizes_sorted))
         num_samples_per_class.append(_num_samples_in_current_class)
         class_sizes_sorted = class_sizes_sorted[_num_samples_in_current_class:]
 
-    return num_samples_per_class
+    return torch.FloatTensor(num_samples_per_class)
 
 
 # FIXME: this function is not robust. needs to be revised
-def predict_max_few_shot_class_size(num_samples_per_class: list) -> int:
-    num_samples_per_class_shifted = num_samples_per_class[1:] + [1]
-    num_samples_per_class = torch.FloatTensor(num_samples_per_class)
-    num_samples_per_class_shifted = torch.FloatTensor(num_samples_per_class_shifted)
-
-    factors = num_samples_per_class / num_samples_per_class_shifted
-    idx = min(int(factors.argmax()) + 1, len(num_samples_per_class) - 1)
-
-    return (num_samples_per_class[idx]).item()
+def predict_max_few_shot_class_size(num_samples_per_class: torch.FloatTensor) -> float:
+    
+    idx = detect_max_step(num_samples_per_class, round_arr=False)
+    
+    return num_samples_per_class[idx].item()
 
 
-def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
+def predict_few_shot_class_samples(class_sizes: torch.Tensor, wide_cover: bool = True) -> torch.Tensor:
+
     num_samples_per_class = predict_num_samples_per_class(class_sizes)
-    K = predict_max_few_shot_class_size(num_samples_per_class)
 
-    few_shot_idxes = (class_sizes <= K).to(torch.long)
+    _num_samples_per_class = torch.cat([torch.arange(len(num_samples_per_class))[:, None], num_samples_per_class[:, None]], dim=1)
+    ods = compute_orthogonal_distances(_num_samples_per_class, _num_samples_per_class[[0, -1], :])
+    max_K_idx = ods.argmax() + 1
+    max_K = num_samples_per_class[max_K_idx].item()
+    
+    few_shot_idxes = (class_sizes <= max_K).to(torch.long)
     return few_shot_idxes
 
+def _detect_max_step_idx(arr: torch.FloatTensor, quantize=True, factor=1.):
+    if quantize:
+        # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
+        arr = torch.round(arr*factor)
+        arr = arr.to(torch.long)
+    sorted_arr = torch.sort(arr, descending=True)[0]
+    # utils.plot_scores(sorted_arr, markersize=2, alpha=1)
+    sorted_arr_shifted = torch.empty_like(sorted_arr)
+    sorted_arr_shifted[0:-1] = sorted_arr[1:]
+    sorted_arr_shifted[-1] = sorted_arr[-1]
+
+    factors = sorted_arr / sorted_arr_shifted
+    idx = min(int(factors.argmax()) + 1, len(sorted_arr) - 1)
+
+    return idx
+
+def detect_max_step(arr: torch.FloatTensor, quantize=True, factor=1.):
+    if quantize:
+        # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
+        _arr = torch.round(arr*factor)
+        _arr = _arr.to(torch.long)
+    sorted_arr = torch.sort(_arr, descending=True)[0]
+    
+    _line = [torch.FloatTensor([0, sorted_arr[0].item()]), torch.FloatTensor([len(sorted_arr), sorted_arr[-1].item()])]
+    _points = torch.cat([torch.arange(len(sorted_arr)).to(torch.float)[:, None], sorted_arr[:, None]], dim=1)
+    ods = compute_orthogonal_distances(_points, _line)
+    max_od_idx = ods.argmax() + 1
+
+    max_od_val = sorted_arr[max_od_idx] / factor
+
+    return max_od_val
 
 def compute_self_sim_min(self_sim: torch.Tensor, mode="min") -> torch.Tensor:
     mins = torch.empty(len(self_sim))
@@ -273,11 +308,11 @@ def _sample_patchwise_few_shot(
         )
 
         _class_sizes = predict_class_sizes(_self_sim, th=_th, vote_type=vote_type)
-
-        _few_shot_idxes = predict_few_shot_class_samples(_class_sizes)
-
-        patchwise_few_shot_idxes[:, p] = _few_shot_idxes
         patchwise_class_sizes[:, p] = _class_sizes
+
+        if not return_class_sizes:
+            _few_shot_idxes = predict_few_shot_class_samples(_class_sizes)
+            patchwise_few_shot_idxes[:, p] = _few_shot_idxes
 
     for p in tqdm(range(num_pixels), desc="Computing patchwise few-shot idxes"):
         _compute_patchwise_few_shot_idxes(p)
@@ -290,6 +325,40 @@ def _sample_patchwise_few_shot(
     sample_features = features[sample_indices]
 
     return sample_features, sample_indices
+
+
+def compute_orthogonal_distances(points: torch.Tensor, line_points: list) -> torch.Tensor:
+
+    points = points.numpy()
+
+    # Extract coordinates of the line
+    (x1, y1), (x2, y2) = line_points[0].numpy(), line_points[1].numpy()
+
+    # Calculate the slope of the line (y = mx + c)
+    dx, dy = x2 - x1, y2 - y1
+    if dx == 0:  # Special case for vertical line
+        return [abs(x - x1) for x, y in points]
+
+    m = dy / dx
+    c = y1 - m * x1
+    m_perp = -1 / m  # Slope of the perpendicular line
+
+    distances = []
+    for x, y in tqdm(points):
+        c_perp = y - m_perp * x
+
+        # Find intersection
+        x_intersect = (c_perp - c) / (m - m_perp)
+        y_intersect = m * x_intersect + c
+
+        # Distance from point to line
+        distance = np.sqrt((x_intersect - x)**2 + (y_intersect - y)**2)
+        distances.append(distance)
+
+    distances = torch.FloatTensor(distances)
+
+    return distances
+
 
 
 if __name__ == "__main__":

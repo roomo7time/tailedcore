@@ -34,7 +34,7 @@ class BaseSampler(abc.ABC):
         return features.clone().to(self.features_device)
 
 
-class GreedyCoresetSampler(BaseSampler):
+class IncrementalGreedyCoresetSampler(BaseSampler):
 
     def __init__(
         self,
@@ -316,6 +316,150 @@ class GreedyCoresetSampler(BaseSampler):
         return min_distances
 
 
+class GreedyCoresetSampler(BaseSampler):
+
+    def __init__(
+        self,
+        percentage: float,
+        dimension_to_project_features_to: int,
+        device: torch.device,
+        brute: bool = True,
+    ):
+        """Greedy Coreset sampling base class."""
+        super().__init__(percentage)
+
+        self.device = device
+        self.dimension_to_project_features_to = dimension_to_project_features_to
+        self.brute = brute
+
+        assert self.brute
+
+    # FIXME: refactor
+    def run(
+        self,
+        features: torch.Tensor,
+    ) -> torch.Tensor:
+        """Subsamples features using Greedy Coreset.
+
+        Args:
+            features: [N x D]
+        """
+        if self.percentage == 1:
+            return features
+
+        assert isinstance(features, torch.Tensor)
+
+        reduced_features = self._reduce_features(
+            features
+        )
+        sample_indices = self._compute_greedy_coreset_indices(
+            reduced_features
+        )
+        sample_features = features[sample_indices]
+
+        return sample_features, sample_indices
+
+    def _reduce_features(
+        self, features: torch.Tensor
+    ):
+        if features.shape[1] == self.dimension_to_project_features_to:
+            return features
+        mapper = torch.nn.Linear(
+            features.shape[1], self.dimension_to_project_features_to, bias=False
+        )
+        _ = mapper.to(self.device)
+        features = features.to(self.device)
+        with torch.no_grad():
+            reduced_features = mapper(features).cpu()
+
+        return reduced_features
+
+    def _compute_greedy_coreset_indices(
+        self, features: torch.Tensor
+    ) -> torch.Tensor:
+        if self.brute:
+            return self._brute_compute_greedy_coreset_indices(features)
+        
+        return self._parallel_compute_greedy_coreset_indices(features)
+
+    def _brute_compute_greedy_coreset_indices(
+        self, features: torch.Tensor
+    ) -> torch.Tensor:
+        """Runs iterative greedy coreset selection.
+
+        Args:
+            features: [NxD] input feature bank to sample.
+        """
+        # torch.cuda.empty_cache()
+        # gc.collect()
+        print("WARNING: Brute-force greedy-sampling.")
+        features = features.to(self.device)
+        num_coreset_samples = int(len(features) * self.percentage)
+        coreset_indices = [np.random.randint(len(features))]
+
+        min_distances = torch.ones(len(features)).to(features.device) * float("inf")
+
+        for _ in tqdm(
+            range(1, num_coreset_samples), desc="brute force greedy sample", leave=False
+        ):
+            current_distances = torch.norm(
+                features - features[coreset_indices[-1]], dim=1
+            )
+            min_distances = torch.minimum(min_distances, current_distances)
+            coreset_indices.append(torch.argmax(min_distances, dim=0).item())
+            current_distances = current_distances.cpu()
+            del current_distances
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        return coreset_indices
+    
+    def _parallel_compute_greedy_coreset_indices(
+        self, features: torch.Tensor
+    ) -> torch.Tensor:
+        """Runs iterative greedy coreset selection.
+
+        Args:
+            features: [NxD] input feature bank to sample.
+        """
+        distance_matrix = self._compute_batchwise_differences(features, features)
+        coreset_anchor_distances = torch.norm(
+            distance_matrix, dim=1
+        )  # TODO: reason why? dummy to initialize?
+
+        coreset_indices = []
+        num_coreset_samples = int(len(features) * self.percentage)
+
+        for _ in range(num_coreset_samples):
+            select_idx = torch.argmax(coreset_anchor_distances).item()
+            coreset_indices.append(select_idx)
+
+            coreset_select_distance = distance_matrix[
+                :, select_idx : select_idx + 1  # noqa E203
+            ]
+            coreset_anchor_distances = torch.cat(
+                [coreset_anchor_distances.unsqueeze(-1), coreset_select_distance], dim=1
+            )
+            coreset_anchor_distances = torch.min(coreset_anchor_distances, dim=1).values
+
+        return coreset_indices
+
+    def _compute_batchwise_differences(
+        self, matrix_a: torch.Tensor, matrix_b: torch.Tensor
+    ) -> torch.Tensor:
+        """Computes batchwise Euclidean distances using PyTorch."""
+
+        matrix_a = matrix_a.to(self.device)
+        matrix_b = matrix_b.to(self.device)
+
+        a_times_a = matrix_a.unsqueeze(1).bmm(matrix_a.unsqueeze(2)).reshape(-1, 1)
+        b_times_b = matrix_b.unsqueeze(1).bmm(matrix_b.unsqueeze(2)).reshape(1, -1)
+        a_times_b = matrix_a.mm(matrix_b.T)
+
+        return (-2 * a_times_b + a_times_a + b_times_b).clamp(0, None).sqrt().cpu()
+
+
+
 class LOFSampler(BaseSampler):
     def __init__(
         self,
@@ -334,47 +478,12 @@ class LOFSampler(BaseSampler):
         self,
         features: torch.Tensor,
         feature_map_shape: torch.Tensor = None,
-        augment_class_sizes: bool = False,
     ):
         # if feature_map_shape is provided, patchwise
         reduced_features = self._reduce_features(features)
         lof_scores = self._compute_lof_scores(
             reduced_features, feature_map_shape,
         )
-
-        # # FIXME: new version is being implemented...
-        # # K must be independently handled for each patch.
-        # thresh = torch.quantile(lof_scores, self.percentage)
-        # sample_indices = torch.where(lof_scores < thresh)[0]
-
-        # if augment_class_sizes:
-        #     class_sizes = class_size.sample_few_shot(
-        #         features,
-        #         feature_map_shape,
-        #         th_type="indep",
-        #         return_class_sizes=True,
-        #     )
-
-        #     scores_by_class_sizes = 1 - class_sizes / class_sizes.max()
-        #     lof_scores *= scores_by_class_sizes
-
-        #     # FIXME: change to max step detection
-        #     num_samples_per_class = class_size.predict_num_samples_per_class(lof_scores)
-        #     K = class_size.predict_max_few_shot_class_size(num_samples_per_class)
-
-        #     sample_indices = torch.where(lof_scores <= K)[0].to(torch.long)
-
-        # TODO: recover this old version if necessary
-        if augment_class_sizes:
-            class_sizes = class_size.sample_few_shot(
-                reduced_features,
-                feature_map_shape,
-                th_type="indep",
-                return_class_sizes=True,
-            )
-
-            scores_by_class_sizes = 1 - class_sizes / class_sizes.max()
-            lof_scores *= scores_by_class_sizes
         
         thresh = torch.quantile(lof_scores, self.percentage)
         sample_indices = torch.where(lof_scores < thresh)[0]
@@ -443,13 +552,10 @@ class LOFSampler(BaseSampler):
 class TailSampler(BaseSampler):
     def __init__(
         self,
-        dimension_to_project_features_to: int = 128,
         device: torch.device = torch.device("cpu"),
         th_type: "str" = "indep",
         vote_type: "str" = "mean",
     ):
-
-        self.dimension_to_project_features_to = dimension_to_project_features_to
         self.device = device
         self.th_type = th_type
         self.vote_type = vote_type
@@ -460,3 +566,86 @@ class TailSampler(BaseSampler):
         )
 
         return features[few_shot_indices], few_shot_indices
+
+
+class FewShotLOFSampler(LOFSampler):
+
+    def run(
+        self,
+        features: torch.Tensor,
+        feature_map_shape: torch.Tensor = None,
+        auto: bool = False
+    ):
+        # if feature_map_shape is provided, patchwise
+        reduced_features = self._reduce_features(features)
+
+        class_sizes = class_size.sample_few_shot(
+            reduced_features,
+            feature_map_shape,
+            th_type="indep",
+            return_class_sizes=True,
+        )
+
+        lof_scores = self._compute_lof_scores(
+            reduced_features, feature_map_shape,
+        )
+
+        sample_indices = self._compute_sample_indices(lof_scores, class_sizes, auto)
+        
+        sample_features = features[sample_indices]
+
+        return sample_features, sample_indices
+    
+    def _compute_sample_indices(self, lof_scores, class_sizes, auto):
+        if auto:
+            return self._compute_sample_indices_auto(lof_scores, class_sizes)
+        
+        return self._compute_sample_indices_manual(lof_scores, class_sizes)
+    
+    def _compute_sample_indices_auto_124(self, lof_scores: torch.Tensor, class_sizes:torch.Tensor):
+
+        lof_scores = lof_scores / lof_scores.max()
+        few_shot_scores = 1 - class_sizes/class_sizes.max()
+        coeffs = 1 - lof_scores*few_shot_scores
+
+        modified_class_sizes = coeffs * class_sizes
+
+        max_idx, K = class_size.detect_max_step_idx(class_sizes)
+
+        percentage = max_idx / len(class_sizes)
+        few_shot_lof_scores = lof_scores * few_shot_scores
+        thresh = torch.quantile(few_shot_lof_scores, percentage)
+        sample_indices = torch.where(few_shot_lof_scores < thresh)[0]
+
+        return sample_indices
+    
+    # def _compute_sample_indices_auto_621_42487(self, lof_scores: torch.Tensor, class_sizes:torch.Tensor):
+    def _compute_sample_indices_auto(self, lof_scores: torch.Tensor, class_sizes:torch.Tensor):
+
+        few_shot_scores = 1 - class_sizes/class_sizes.max()
+
+        aug_lof_scores = lof_scores * few_shot_scores
+        thresh  = class_size.detect_max_step(aug_lof_scores, quantize=True, factor=len(aug_lof_scores))
+        sample_indices = torch.where(aug_lof_scores < thresh)[0]
+
+        return sample_indices
+    
+    def _compute_sample_indices_auto_115_421986(self, lof_scores: torch.Tensor, class_sizes:torch.Tensor):
+
+        aug_class_sizes = class_sizes / lof_scores
+        
+        outlier_idxes  = class_size.predict_few_shot_class_samples(aug_class_sizes)
+        
+        sample_indices = torch.where(outlier_idxes == 0)[0]
+
+        return sample_indices
+    
+    def _compute_sample_indices_manual(self, lof_scores: torch.Tensor, class_sizes:torch.Tensor):
+
+        few_shot_scores = 1 - class_sizes/class_sizes.max()
+
+        aug_lof_scores = lof_scores * few_shot_scores
+        thresh = torch.quantile(aug_lof_scores, self.percentage)
+        sample_indices = torch.where(aug_lof_scores < thresh)[0]
+
+        return sample_indices

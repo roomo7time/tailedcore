@@ -14,3 +14,4 @@ pip install natsort==8.4.0
 pip install GPUtil==1.4.0
 pip install pythresh==0.3.6
 pip install pyclustering==0.10.1.2
+pip install kneed==0.8.5

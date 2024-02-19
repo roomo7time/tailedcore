@@ -165,4 +165,5 @@ artifacts/
 artifacts/*
 
 configs/*
-!configs/patchcore00.yaml
+!configs/patchcore_mvtec_00.yaml
+!configs/tailedpatch_mvtec_01.yaml

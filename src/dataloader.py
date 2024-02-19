@@ -52,24 +52,24 @@ def clists():
     return mvtec_clist, visa_clist
 
 
-def get_dataloaders(config, data_format, data_path, batch_size):
+def get_dataloaders(data_config, data_format, data_path, batch_size):
 
     if data_format == "mvtec-multiclass":
         return get_mvtec_dataloaders(
             data_path,
             batch_size,
-            config.data.imagesize,
-            config.data.resize,
+            data_config.imagesize,
+            data_config.resize,
             multiclass=True,
         )
     elif data_format == "labelme":
         return get_labelme_dataloaders(
             data_path,
             batch_size,
-            config.data.imagesize,
-            config.data.inputsize,
-            config.data.overlap_ratio,
-            config.data.roi,
+            data_config.imagesize,
+            data_config.inputsize,
+            data_config.overlap_ratio,
+            data_config.roi,
         )
     else:
         raise NotImplementedError()

@@ -18,10 +18,12 @@ def parse_args():
     parser.add_argument(
         "--data_sub_path",
         type=str,
-        default="anomaly_detection/sym_mvtec_step_k4",
+        default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed0",
+        # default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed0",
+        # default="anomaly_detection/symlink_mvtec_pareto_nr10_seed0",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
-    parser.add_argument("--config_name", type=str, default="patchcore_mvtec_01")
+    parser.add_argument("--config_name", type=str, default="tailedpatch_mvtec_01")
 
     # # toy setting
     # parser.add_argument(

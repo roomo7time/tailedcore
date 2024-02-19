@@ -24,7 +24,7 @@ from src.backbone import get_backbone
 from src.feature_embedder import FeatureEmbedder
 
 from src.patch_maker import PatchMaker
-from src.sampler import LOFSampler, TailSampler
+from src.sampler import LOFSampler, TailSampler, FewShotLOFSampler
 
 
 def analyze_extracted(args):
@@ -201,8 +201,8 @@ def _evaluate_anomaly_patch_detection(
 ) -> dict:
 
     # method_names = ["scs-indep-mean", "lof", "lof-scs-indep-mean"]
-    # method_names = ["lof-scs-indep-mean"]
-    method_names = ["lof"]
+    method_names = ["lof-scs-indep-mean"]
+    # method_names = ["lof"]
     results = []
     for method_name in method_names:
         _result = _get_result_anomaly_patch_detection(
@@ -229,8 +229,8 @@ def _get_result_anomaly_patch_detection(
         _, lof_idxes = LOFSampler().run(features, feature_map_shape)
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lof_idxes)
     elif method_name == "lof-scs-indep-mean":
-        _, lofcsp_idxes = LOFSampler().run(
-            features, feature_map_shape, augment_class_sizes=True
+        _, lofcsp_idxes = FewShotLOFSampler().run(
+            features, feature_map_shape,
         )
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
     else:
@@ -271,8 +271,12 @@ def _evaluate_tail_class_detection(
     #     "scs-indep-nearest",
     # ]
 
+    # method_names = [
+    #     "lof_scs-indep-mean",
+    # ]
+
     method_names = [
-        "lof_scs-indep-mean",
+        "scs-indep-mean",
     ]
 
     results = []
