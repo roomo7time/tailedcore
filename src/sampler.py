@@ -2,7 +2,9 @@ import torch
 import random
 import abc
 import gc
+import time
 import numpy as np
+from copy import deepcopy
 from typing import Union
 from tqdm import tqdm
 from copy import deepcopy
@@ -371,6 +373,8 @@ class GreedyCoresetSampler(BaseSampler):
         features = features.to(self.device)
         with torch.no_grad():
             reduced_features = mapper(features).cpu()
+        
+        del mapper
 
         return reduced_features
 
@@ -515,7 +519,9 @@ class LOFSampler(BaseSampler):
         clf = LocalOutlierFactor(n_neighbors=self.lof_k, metric="l2")
 
         scores = torch.empty((batch_size, num_patches), dtype=torch.float)
+        
         for p in tqdm(range(num_patches), desc="Computing LOF..."):
+
             _features = features[:, p, :].cpu().numpy()
             clf.fit(_features)
             _scores = torch.FloatTensor(-clf.negative_outlier_factor_)
@@ -545,8 +551,10 @@ class LOFSampler(BaseSampler):
         features = features.to(self.device)
         with torch.no_grad():
             reduced_features = mapper(features).cpu()
+        
+        del mapper
 
-        return reduced_features
+        return reduced_features.clone().detach()
 
 
 class TailSampler(BaseSampler):
@@ -561,6 +569,9 @@ class TailSampler(BaseSampler):
         self.vote_type = vote_type
 
     def run(self, features: torch.Tensor, feature_map_shape: torch.Tensor = None):
+
+        features = deepcopy(features)
+
         _, few_shot_indices = class_size.sample_few_shot(
             features, feature_map_shape, th_type=self.th_type, vote_type=self.vote_type
         )

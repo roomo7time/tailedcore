@@ -37,7 +37,7 @@ def analyze_extracted(args):
     input_shape = (3, config.data.inputsize, config.data.inputsize)
 
     dataloaders = get_dataloaders(
-        config,
+        config.data,
         data_format=args.data_format,
         data_path=args.data_path,
         batch_size=args.batch_size,
@@ -136,7 +136,7 @@ def analyze_patch(
     label_names = ["normal", "abnormal"]
     anomaly_patch_scores_gt = downsized_masks.reshape((-1))
     is_anomaly_patch_gt = torch.round(anomaly_patch_scores_gt).to(torch.long)
-    feature_map_shape = feas.shape[2:]
+    feature_map_shape = [28, 28]
     features = (
         feas.reshape((feas.shape[0], feas.shape[1], -1))
         .permute(0, 2, 1)

@@ -38,7 +38,7 @@ def extract_features(args):
     input_shape = (3, config.data.inputsize, config.data.inputsize)
 
     dataloaders = get_dataloaders(
-        config,
+        config.data,
         data_format=args.data_format,
         data_path=args.data_path,
         batch_size=args.batch_size,

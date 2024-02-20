@@ -333,6 +333,7 @@ class TailedPatch(BaseCore):
         return image_scores.numpy().tolist(), score_masks
 
     def _get_features(self, dataloader: DataLoader, return_embeddings: bool = False) -> torch.Tensor:
+
         self.feature_embedder.eval()
         features = []
         embeddings = []
@@ -350,30 +351,39 @@ class TailedPatch(BaseCore):
                 features.append(_features)
 
         features = torch.cat(features, dim=0)
+
+        # extracted_path = os.path.join(os.path.dirname(self.coreset_path), "extracted.pt")
+        # extracted = torch.load(extracted_path)
+
         if return_embeddings:
             embeddings = torch.cat(embeddings, dim=0)
             return features, embeddings 
         
         return features
 
-    def _get_coreset(self, trainloader: DataLoader, base_coreset=None) -> torch.Tensor:
+    def _get_coreset(self, trainloader: DataLoader) -> torch.Tensor:
+
+        feature_map_shape = self.feature_map_shape[:2]
 
         h, w = self.feature_map_shape[0], self.feature_map_shape[1]
 
         features, embeddings = self._get_features(trainloader, return_embeddings=True)
-        
+        features = features.clone().detach()
+        embeddings = embeddings.clone().detach()
+        # for head
+        head_features, _ = self.few_shot_lof_sampler.run(features, feature_map_shape, auto=self.auto_thresholding_on_lof)
+        coreset_head_features, _ = self.greedy_coreset_sampler.run(head_features)
+    
         # for tail
         _, tail_embedding_indices = self.tail_sampler.run(embeddings)
         tail_features = features.reshape(-1, h*w, features.shape[-1])[tail_embedding_indices].reshape(-1, features.shape[-1])
 
         if self.noise_discriminate_on_tail_patches:
-            tail_features = self.few_shot_lof_sampler.run(tail_features, self.feature_map_shape, auto=self.auto_thresholding_on_lof)
+            tail_features, _ = self.few_shot_lof_sampler.run(tail_features, feature_map_shape, auto=self.auto_thresholding_on_lof)
 
-        coreset_tail_features = self.greedy_coreset_sampler.run(tail_features)
+        coreset_tail_features, _ = self.greedy_coreset_sampler.run(tail_features)
 
-        # for head
-        head_features, _ = self.few_shot_lof_sampler.run(features, self.feature_map_shape, auto=self.auto_thresholding_on_lof)
-        coreset_head_features = self.greedy_coreset_sampler.run(head_features)
+        
         
         coreset_features = torch.cat([coreset_tail_features, coreset_head_features], dim=0)
 

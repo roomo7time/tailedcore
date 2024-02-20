@@ -498,11 +498,11 @@ def is_in_mvtec_train_folder(file_path, base_dir):
 if __name__ == "__main__":
 
     # arguments
-    # tail_type = "step"
-    tail_type = "pareto"
-    seed = 0
+    tail_type = "step"
+    # tail_type = "pareto"
+    seed = 2
 
-    tail_k = 1  # 4 or 1
+    tail_k = 4  # 4 or 1
     noise_on_tail = False
     noise_ratio = 0.1
 
