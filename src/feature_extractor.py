@@ -1,3 +1,5 @@
+
+
 import torch
 import torch.nn.functional as F
 from typing import List
@@ -5,15 +7,14 @@ from typing import List
 from .patch_maker import PatchMaker
 from .feature_aggregator import NetworkFeatureAggregator
 from .common import Preprocessing, Aggregator
+from .backbone import get_backbone
 
-
-class FeatureEmbedder(torch.nn.Module):
+class FeatureExtractor(torch.nn.Module):
 
     def __init__(
         self,
-        device,
         input_shape,
-        backbone,
+        backbone_name,
         layers_to_extract_from,
         pretrain_embed_dimension=1024,
         target_embed_dimension=1024,
@@ -21,10 +22,9 @@ class FeatureEmbedder(torch.nn.Module):
         patchstride=1,
         embedding_to_extract_from: str = None,
     ):
-        super(FeatureEmbedder, self).__init__()
+        super(FeatureExtractor, self).__init__()
 
-        self.device = device
-        self.backbone = backbone
+        self.backbone = get_backbone(backbone_name)
 
         self.input_shape = input_shape
         self.layers_to_extract_from = layers_to_extract_from
@@ -38,7 +38,7 @@ class FeatureEmbedder(torch.nn.Module):
             self.embedding_to_extract_from = embedding_to_extract_from
 
         feature_aggregator = NetworkFeatureAggregator(
-            self.backbone, all_layers_to_extract_from, self.device
+            self.backbone, all_layers_to_extract_from, torch.device("cpu")
         )
         feature_aggregator.eval()
         feature_dimensions = feature_aggregator.feature_dimensions(input_shape)[
@@ -49,13 +49,12 @@ class FeatureEmbedder(torch.nn.Module):
 
         preadapt_aggregator = Aggregator(target_dim=target_embed_dimension)
 
-        _ = preadapt_aggregator.to(self.device)
-
         self.forward_modules = torch.nn.ModuleDict({})
         self.forward_modules["feature_aggregator"] = feature_aggregator
         self.forward_modules["preprocessing"] = preprocessing
         self.forward_modules["preadapt_aggregator"] = preadapt_aggregator
 
+        self.eval()
         self.feature_map_shape = self._compute_feature_map_shape()
         self.target_embed_dimension = target_embed_dimension
 
@@ -65,16 +64,12 @@ class FeatureEmbedder(torch.nn.Module):
     ) -> torch.Tensor:
         """Returns feature embeddings for images."""
 
-        images = images.to(torch.float).to(self.device)
-
         def _detach(features):
             if detach:
                 return features.detach().cpu()
             return features
 
-        _ = self.forward_modules["feature_aggregator"].eval()
-        with torch.no_grad():
-            features = self.forward_modules["feature_aggregator"](images)
+        features = self.forward_modules["feature_aggregator"](images)
 
         if return_embeddings:
             embeddings = features[self.embedding_to_extract_from]
@@ -141,12 +136,11 @@ class FeatureEmbedder(torch.nn.Module):
         return _detach(features)
 
     def _compute_feature_map_shape(self):
-        _input = torch.ones([1] + list(self.input_shape)).to(self.device)
+        self.eval()
+        _device = next(self.parameters()).device
+        _input = torch.ones([1] + list(self.input_shape)).to(_device)
         dummy_feas, feature_map_shapes = self(_input, provide_patch_shapes=True)
         return feature_map_shapes[0] + [dummy_feas.shape[-1]]
 
     def get_feature_map_shape(self):
         return self.feature_map_shape
-
-
-

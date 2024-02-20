@@ -21,6 +21,7 @@ from src.get_args import parse_args  # FIXME: make independent args
 from src.engine import Engine
 from src.backbone import get_backbone
 from src.feature_embedder import FeatureEmbedder
+from src.feature_extractor import FeatureExtractor
 
 from src.patch_maker import PatchMaker
 

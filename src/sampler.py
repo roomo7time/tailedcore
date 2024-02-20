@@ -560,11 +560,9 @@ class LOFSampler(BaseSampler):
 class TailSampler(BaseSampler):
     def __init__(
         self,
-        device: torch.device = torch.device("cpu"),
         th_type: "str" = "indep",
         vote_type: "str" = "mean",
     ):
-        self.device = device
         self.th_type = th_type
         self.vote_type = vote_type
 

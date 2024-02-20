@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument(
         "--data_sub_path",
         type=str,
-        default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed0",
+        default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed1",
         # default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed0",
         # default="anomaly_detection/symlink_mvtec_pareto_nr10_seed0",
     )

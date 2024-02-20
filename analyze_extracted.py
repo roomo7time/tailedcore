@@ -9,6 +9,7 @@ import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+from collections import Counter
 from tqdm import tqdm
 from joblib import Parallel, delayed
 
@@ -61,13 +62,17 @@ def analyze_extracted(args):
     class_names = extracted["class_names"]
     class_sizes = extracted["class_sizes"]
 
+    num_samples_per_class = dict(Counter(class_names))
+    save_data_info_path = os.path.join("./artifacts", args.data_name, 'num_samples_per_class.csv')
+    utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
+
     # analyze_gap(
     #     gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
     # )
-    analyze_patch(feas, masks, class_names, save_train_dir_path, save_plot=False)
+    analyze_patch(feas, masks, class_names, save_train_dir_path, save_plot=True)
 
 
-def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=False):
+def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=True):
 
     if gaps.ndim == 4:
         gaps = gaps[:, :, 0, 0]
@@ -121,6 +126,9 @@ def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=False
 
         Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
 
+        # for i in range(len(self_sim)):
+        #     plot_gap_self_sim(i)
+
 
 def analyze_patch(
     feas: torch.Tensor, masks, class_names, save_dir, save_plot=False
@@ -147,18 +155,17 @@ def analyze_patch(
         is_anomaly_patch_gt, features, feature_map_shape, save_dir
     )
 
-    # FIXME: bug fix is required
-    save_plot = False
     if save_plot:
-        save_dir_normal = os.path.join(save_dir, "self_sim", "normal")
-        save_dir_abnormal = os.path.join(save_dir, "self_sim", "abnormal")
+        save_dir_normal = os.path.join(save_dir, "plot", "self_sim", "normal")
+        save_dir_abnormal = os.path.join(save_dir, "plot", "self_sim", "abnormal")
 
         os.makedirs(save_dir_normal, exist_ok=True)
         os.makedirs(save_dir_abnormal, exist_ok=True)
 
         th = np.cos(np.pi / 8)  # FIXME: tmp
-        pixelwise_gt_scores = pixelwise_gt_scores.numpy()
-        pixelwise_labels = pixelwise_labels.numpy()
+        pixelwise_feas = feas.reshape(n, fea_dim, -1).permute(2, 0, 1)
+        pixelwise_gt_scores = anomaly_patch_scores_gt.reshape(n, h*w).numpy()
+        pixelwise_labels = is_anomaly_patch_gt.reshape(n, h*w).numpy()
         pixelwise_self_sim = class_size.compute_self_sim(pixelwise_feas).numpy()
 
         def plot_pixelwise_self_sim(p, i):
@@ -193,7 +200,9 @@ def analyze_patch(
             for i in range(len(pixelwise_self_sim[p]))
         ]
 
-        Parallel(n_jobs=-1)(delayed(plot_pixelwise_self_sim)(p, i) for p, i in pi_pairs)
+        # Parallel(n_jobs=-1)(delayed(plot_pixelwise_self_sim)(p, i) for p, i in pi_pairs)
+        for p, i in pi_pairs:
+            plot_pixelwise_self_sim(p, i)
 
 
 def _evaluate_anomaly_patch_detection(

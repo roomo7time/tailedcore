@@ -10,7 +10,13 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from .feature_embedder import FeatureEmbedder
-from .sampler import IncrementalGreedyCoresetSampler, GreedyCoresetSampler, TailSampler, FewShotLOFSampler
+from .sampler import (
+    IncrementalGreedyCoresetSampler,
+    GreedyCoresetSampler,
+    TailSampler,
+    FewShotLOFSampler,
+    LOFSampler
+)
 from .common import FaissNN, NearestNeighbourScorer, RescaleSegmentor
 
 
@@ -43,7 +49,7 @@ def get_coreset_model(
     max_coreset_size=None,
     **kwargs,
 ) -> BaseCore:
-    
+
     coreset_ratio = getattr(model_config, "greedy_ratio", coreset_ratio)
     if model_config.coreset_model_name == "patchcore":
         return ConstPatchCore(
@@ -69,6 +75,7 @@ def get_coreset_model(
             sampler_on_gpu=sampler_on_gpu,
             save_dir_path=save_dir_path,
             brute=brute,
+            noise_discriminator_type=getattr(model_config, 'noise_discriminator_type', 'few_shot_lof')
         )
     else:
         raise NotImplementedError()
@@ -230,7 +237,6 @@ class ConstPatchCore(BaseCore):
         return image_scores, score_masks
 
 
-
 class TailedPatch(BaseCore):
 
     def __init__(
@@ -238,7 +244,7 @@ class TailedPatch(BaseCore):
         feature_embedder: FeatureEmbedder,
         device,
         imagesize,
-        coreset_ratio=0.001,
+        coreset_ratio=0.01,
         greedy_proj_dim=128,
         faiss_on_gpu=True,
         faiss_num_workers=8,
@@ -248,6 +254,7 @@ class TailedPatch(BaseCore):
         brute=True,
         noise_discriminate_on_tail_patches=False,
         auto_thresholding_on_lof=False,
+        noise_discriminator_type='few_shot_lof'
     ):
         super(TailedPatch, self).__init__()
 
@@ -260,15 +267,21 @@ class TailedPatch(BaseCore):
             brute=brute,
         )
 
-        self.tail_sampler = TailSampler(device=device if sampler_on_gpu else torch.device("cpu"))
-        self.few_shot_lof_sampler = FewShotLOFSampler(
-            device=device if sampler_on_gpu else torch.device("cpu"),
-        )
+        self.tail_sampler = TailSampler()
 
-        nn_method = FaissNN(faiss_on_gpu, faiss_num_workers, device=device.index)
-        self.anomaly_scorer = NearestNeighbourScorer(
-            n_nearest_neighbours=anomaly_score_num_nn, nn_method=nn_method
-        )
+        if noise_discriminator_type == 'few_shot_lof':
+            self.noise_discriminator = FewShotLOFSampler(
+                device=device if sampler_on_gpu else torch.device("cpu"),
+            )
+        elif  noise_discriminator_type == 'lof':
+            self.noise_discriminator = LOFSampler(
+                device=device if sampler_on_gpu else torch.device("cpu"),
+            )
+
+        self.faiss_on_gpu = faiss_on_gpu
+        self.faiss_num_workers = faiss_num_workers
+        self.device = device
+        self.anomaly_score_num_nn = anomaly_score_num_nn
 
         self.feature_map_shape = self.feature_embedder.get_feature_map_shape()
 
@@ -281,7 +294,7 @@ class TailedPatch(BaseCore):
 
         self.noise_discriminate_on_tail_patches = noise_discriminate_on_tail_patches
         self.auto_thresholding_on_lof = auto_thresholding_on_lof
-    
+
     def fit(self, trainloader: DataLoader, set_predictor=True):
 
         tqdm.write("Fitting...")
@@ -292,6 +305,14 @@ class TailedPatch(BaseCore):
             self._save_coreset_features(coreset_features)
 
         if set_predictor:
+
+            nn_method = FaissNN(
+                self.faiss_on_gpu, self.faiss_num_workers, device=self.device.index
+            )
+            self.anomaly_scorer = NearestNeighbourScorer(
+                n_nearest_neighbours=self.anomaly_score_num_nn, nn_method=nn_method
+            )
+
             self.anomaly_scorer.fit([coreset_features])
 
     def _load_coreset_features(self) -> torch.Tensor:
@@ -332,7 +353,9 @@ class TailedPatch(BaseCore):
 
         return image_scores.numpy().tolist(), score_masks
 
-    def _get_features(self, dataloader: DataLoader, return_embeddings: bool = False) -> torch.Tensor:
+    def _get_features(
+        self, dataloader: DataLoader, return_embeddings: bool = False
+    ) -> torch.Tensor:
 
         self.feature_embedder.eval()
         features = []
@@ -344,7 +367,9 @@ class TailedPatch(BaseCore):
                 if isinstance(data, dict):
                     images = data["image"]
                 if return_embeddings:
-                    _features, _embeddings = self.feature_embedder(images, return_embeddings=True)
+                    _features, _embeddings = self.feature_embedder(
+                        images, return_embeddings=True
+                    )
                     embeddings.append(_embeddings[:, :, 0, 0])
                 else:
                     _features = self.feature_embedder(images)
@@ -352,42 +377,49 @@ class TailedPatch(BaseCore):
 
         features = torch.cat(features, dim=0)
 
-        # extracted_path = os.path.join(os.path.dirname(self.coreset_path), "extracted.pt")
-        # extracted = torch.load(extracted_path)
-
         if return_embeddings:
             embeddings = torch.cat(embeddings, dim=0)
-            return features, embeddings 
-        
+            return features, embeddings
+
         return features
 
     def _get_coreset(self, trainloader: DataLoader) -> torch.Tensor:
+        
+        features, embeddings = self._get_features(trainloader, return_embeddings=True)
+        coreset_tail_features = self._get_coreset_tail(features, embeddings)
+        coreset_head_features = self._get_coreset_head(features)
 
-        feature_map_shape = self.feature_map_shape[:2]
+        coreset_features = torch.cat(
+            [coreset_tail_features, coreset_head_features], dim=0
+        )
+
+        return coreset_features
+    
+    def _get_coreset_tail(self, features, embeddings):
 
         h, w = self.feature_map_shape[0], self.feature_map_shape[1]
 
-        features, embeddings = self._get_features(trainloader, return_embeddings=True)
-        features = features.clone().detach()
-        embeddings = embeddings.clone().detach()
-        # for head
-        head_features, _ = self.few_shot_lof_sampler.run(features, feature_map_shape, auto=self.auto_thresholding_on_lof)
-        coreset_head_features, _ = self.greedy_coreset_sampler.run(head_features)
-    
-        # for tail
         _, tail_embedding_indices = self.tail_sampler.run(embeddings)
-        tail_features = features.reshape(-1, h*w, features.shape[-1])[tail_embedding_indices].reshape(-1, features.shape[-1])
+        tail_features = features.reshape(-1, h * w, features.shape[-1])[
+            tail_embedding_indices
+        ].reshape(-1, features.shape[-1])
 
         if self.noise_discriminate_on_tail_patches:
-            tail_features, _ = self.few_shot_lof_sampler.run(tail_features, feature_map_shape, auto=self.auto_thresholding_on_lof)
+            tail_features, _ = self.noise_discriminator.run(
+                tail_features, self.feature_map_shape[:2]
+            )
 
         coreset_tail_features, _ = self.greedy_coreset_sampler.run(tail_features)
 
-        
-        
-        coreset_features = torch.cat([coreset_tail_features, coreset_head_features], dim=0)
+        return coreset_tail_features
+    
+    def _get_coreset_head(self, features):
+        head_features, _ = self.noise_discriminator.run(
+            features, self.feature_map_shape[:2]
+        )
+        coreset_head_features, _ = self.greedy_coreset_sampler.run(head_features)
 
-        return coreset_features
+        return coreset_head_features
 
     def predict(self, images) -> np.ndarray:
         with torch.no_grad():

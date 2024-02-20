@@ -7,7 +7,7 @@ from scipy.stats import pareto
 from copy import deepcopy
 from collections import defaultdict
 
-from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict
+from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict, save_dicts_to_csv
 
 _MVTEC_CLASS_LIST = [
     "bottle",
@@ -54,6 +54,10 @@ def _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_n
     }
 
     save_dict(data, data_config_path)
+    save_dicts_to_csv([{
+        "num_tail_samples": num_tail_samples,
+        "num_noise_samples": num_noise_samples,
+    }], filename=os.path.splitext(data_config_path)[0] + '.csv')
 
 
 def make_data_step(
@@ -66,10 +70,12 @@ def make_data_step(
     seed: int=0,
 ) -> None:
     set_seed(seed)
-    data_config_path = os.path.join(_DATA_CONFIG_ROOT, f'step_nr{int(noise_ratio*100):02d}_k{tail_k}_seed{seed}.pkl')
+    data_config_name = os.path.join(_DATA_CONFIG_ROOT, f'step_nr{int(noise_ratio*100):02d}_k{tail_k}_seed{seed}')
 
     if noise_on_tail:
-        data_config_path += f"_tailnoised"
+        data_config_name += f"_tailnoised"
+    
+    data_config_path = f"{data_config_name}.pkl"
 
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
@@ -87,7 +93,7 @@ def make_data_step(
             noise_on_tail=noise_on_tail,
         )
 
-        _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
+    _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
 
     _make_data(
         target_dir=target_dir,
@@ -500,9 +506,9 @@ if __name__ == "__main__":
     # arguments
     tail_type = "step"
     # tail_type = "pareto"
-    seed = 2
+    seed = 0
 
-    tail_k = 4  # 4 or 1
+    tail_k = 1  # 4 or 1
     noise_on_tail = False
     noise_ratio = 0.1
 
