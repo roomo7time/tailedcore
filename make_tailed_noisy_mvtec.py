@@ -114,10 +114,14 @@ def make_data_pareto(
     seed: int = 0,
 ) -> None:
     
-    data_config_path = os.path.join(_DATA_CONFIG_ROOT, f'pareto_nr{int(noise_ratio*100):02d}.pkl')
+    set_seed(seed)
+
+    data_config_name = os.path.join(_DATA_CONFIG_ROOT, f'pareto_nr{int(noise_ratio*100):02d}_seed{seed}')
 
     if noise_on_tail:
-        data_config_path += f"_tailnoised"
+        data_config_name += f"_tailnoised"
+    
+    data_config_path = f"{data_config_name}.pkl"
     
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
@@ -129,7 +133,7 @@ def make_data_pareto(
             class_list, train_files, noise_ratio, noise_on_tail=noise_on_tail
         )
     
-        _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
+    _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
 
     _make_data(
         target_dir=target_dir,
@@ -504,9 +508,9 @@ def is_in_mvtec_train_folder(file_path, base_dir):
 if __name__ == "__main__":
 
     # arguments
-    tail_type = "step"
-    # tail_type = "pareto"
-    seed = 0
+    # tail_type = "step"
+    tail_type = "pareto"
+    seed = 2
 
     tail_k = 1  # 4 or 1
     noise_on_tail = False
