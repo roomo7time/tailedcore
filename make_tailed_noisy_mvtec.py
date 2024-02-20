@@ -96,6 +96,7 @@ def make_data_step(
     _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
 
     _make_data(
+        source_dir=source_dir,
         target_dir=target_dir,
         files=files,
         train_files=train_files,
@@ -136,6 +137,7 @@ def make_data_pareto(
     _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
 
     _make_data(
+        source_dir=source_dir,
         target_dir=target_dir,
         files=files,
         train_files=train_files,
@@ -147,6 +149,7 @@ def make_data_pareto(
 
 
 def _make_data(
+    source_dir,
     target_dir,
     files,
     train_files,
@@ -186,17 +189,17 @@ def _get_mvtec_base_file_info(source_dir):
     anomaly_files = {}
     for class_name in _MVTEC_CLASS_LIST:
         files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name), ext="png"
+            os.path.join(source_dir, class_name), source_dir, ext="png"
         )
         train_files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name, "train"), ext="png"
+            os.path.join(source_dir, class_name, "train"), source_dir, ext="png"
         )
         test_files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name, "test"), ext="png"
+            os.path.join(source_dir, class_name, "test"), source_dir, ext="png"
         )
 
         _test_good_files = list_files_in_folders(
-            os.path.join(source_dir, class_name, "test", "good"), ext="png"
+            os.path.join(source_dir, class_name, "test", "good"), source_dir, ext="png"
         )
         anomaly_files[class_name] = [
             file for file in test_files[class_name] if file not in _test_good_files
@@ -380,7 +383,8 @@ def _make_file_mapper(
     assert file_list is not None
     file_mapper = {}
     for file in file_list:
-        _rel_path = os.path.relpath(file, source_dir)
+        _rel_path = file
+        _source_file_path = os.path.join(source_dir, _rel_path)
         _target_file_path = os.path.join(target_dir, _rel_path)
         if reflect_subfolder_depth > 0:
             _target_file_path = os.path.join(
@@ -392,12 +396,12 @@ def _make_file_mapper(
             _target_file_path = modify_subfolders_in_path(
                 _target_file_path, modify_subfolder_by
             )
-        file_mapper[file] = _target_file_path
+        file_mapper[_source_file_path] = _target_file_path
 
     return file_mapper
 
 
-def list_files_in_folders(directory, ext="png"):
+def list_files_in_folders(directory, source_dir, ext="png"):
     """
     List all files with a given extension in a directory and its subdirectories using glob.
 
@@ -410,8 +414,9 @@ def list_files_in_folders(directory, ext="png"):
 
     # Use glob to find files recursively
     files_with_ext = glob.glob(search_pattern, recursive=True)
+    rel_files_with_ext = [os.path.relpath(path, source_dir) for path in files_with_ext]
 
-    return files_with_ext
+    return rel_files_with_ext
 
 
 def list_files_to_remove(file_list, k):
@@ -505,12 +510,14 @@ def is_in_mvtec_train_folder(file_path, base_dir):
     return "train" in parts and parts.index("train") == 1
 
 
-if __name__ == "__main__":
 
+
+
+def main():
     # arguments
     # tail_type = "step"
     tail_type = "pareto"
-    seed = 2
+    seed = 0
 
     tail_k = 1  # 4 or 1
     noise_on_tail = False
@@ -546,3 +553,8 @@ if __name__ == "__main__":
     compare_directories(
         source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
     )
+
+
+if __name__ == "__main__":
+    main()
+    
