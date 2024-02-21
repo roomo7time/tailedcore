@@ -80,18 +80,18 @@ def make_data_step(
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
     else:
-
-        class_list = _MVTEC_CLASS_LIST
-        files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
-        num_tail_samples, num_noise_samples, head_classes = _make_class_info_step_tail(
-            class_list=class_list,
-            train_files=train_files,
-            anomaly_files=anomaly_files,
-            noise_ratio=noise_ratio,
-            tail_k=tail_k,
-            tail_class_ratio=tail_class_ratio,
-            noise_on_tail=noise_on_tail,
-        )
+        raise FileNotFoundError()
+        # class_list = _MVTEC_CLASS_LIST
+        # files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
+        # num_tail_samples, num_noise_samples, head_classes = _make_class_info_step_tail(
+        #     class_list=class_list,
+        #     train_files=train_files,
+        #     anomaly_files=anomaly_files,
+        #     noise_ratio=noise_ratio,
+        #     tail_k=tail_k,
+        #     tail_class_ratio=tail_class_ratio,
+        #     noise_on_tail=noise_on_tail,
+        # )
 
     _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
 
@@ -455,6 +455,11 @@ def create_symlinks(file_mapper):
     """
     for source, target in file_mapper.items():
         # Ensure the directory of the target path exists
+
+        # jay_ubuntu20d
+        source = source.replace("/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec_anomaly_detection/", "/savespace/database/generic/mvtec/")
+        target = target.replace("/mnt/hdd01/data/image_datasets/anomaly_detection/",                         "/savespace/database/SYMLINKS/project_tailedcore/mvtec/")
+
         target_dir = os.path.dirname(target)
         os.makedirs(target_dir, exist_ok=True)
 
@@ -515,11 +520,11 @@ def is_in_mvtec_train_folder(file_path, base_dir):
 
 def main():
     # arguments
-    # tail_type = "step"
-    tail_type = "pareto"
+    tail_type = "step"
+    # tail_type = "pareto"
     seed = 0
 
-    tail_k = 1  # 4 or 1
+    tail_k = 4  # 4 or 1
     noise_on_tail = False
     noise_ratio = 0.1
 
