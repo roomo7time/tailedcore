@@ -69,7 +69,7 @@ def analyze_extracted(args):
     # analyze_gap(
     #     gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
     # )
-    analyze_patch(feas, masks, class_names, save_train_dir_path, save_plot=True)
+    analyze_patch(feas, masks, gaps, save_train_dir_path, save_plot=False)
 
 
 def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=True):
@@ -88,14 +88,14 @@ def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=True)
     )
 
     # FIXME:
-    save_plot = False
     if save_plot:
 
+        _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
+        _few_shot_labels = (class_sizes < 20).tolist()
         save_plot_dir = os.path.join(save_dir, "plot_gap")
 
         self_sim = class_size.compute_self_sim(gaps)
-        _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
-        _few_shot_labels = (class_sizes < 20).tolist()
+        
 
         self_sim_abnormal_plot_dir = os.path.join(save_plot_dir, "self_sim_abnormal")
         self_sim_few_shot_plot_dir = os.path.join(save_plot_dir, "self_sim_few_shot")
@@ -131,7 +131,7 @@ def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=True)
 
 
 def analyze_patch(
-    feas: torch.Tensor, masks, class_names, save_dir, save_plot=False
+    feas: torch.Tensor, masks, gaps, save_dir, save_plot=False
 ):
 
     downsized_masks = _downsize_masks(masks, mode="bilinear")
@@ -152,7 +152,7 @@ def analyze_patch(
     )
 
     _evaluate_anomaly_patch_detection(
-        is_anomaly_patch_gt, features, feature_map_shape, save_dir
+        is_anomaly_patch_gt, features, feature_map_shape, gaps, save_dir
     )
 
     if save_plot:
@@ -173,8 +173,8 @@ def analyze_patch(
 
             _self_sim = pixelwise_self_sim[p]
             _scores = _self_sim[i]
-            _gt_scores = pixelwise_gt_scores[p].astype(np.float_)
-            _labels = pixelwise_labels[p].astype(np.int_)
+            _gt_scores = pixelwise_gt_scores[:, p].astype(np.float_)
+            _labels = pixelwise_labels[:, p].astype(np.int_)
 
             if _labels[i] > 0:
                 _dir = save_dir_abnormal
@@ -196,26 +196,28 @@ def analyze_patch(
 
         pi_pairs = [
             (p, i)
-            for p in range(len(pixelwise_labels))
+            for p in range(len(pixelwise_self_sim))
             for i in range(len(pixelwise_self_sim[p]))
         ]
 
-        # Parallel(n_jobs=-1)(delayed(plot_pixelwise_self_sim)(p, i) for p, i in pi_pairs)
-        for p, i in pi_pairs:
-            plot_pixelwise_self_sim(p, i)
+        Parallel(n_jobs=-1)(delayed(plot_pixelwise_self_sim)(p, i) for p, i in pi_pairs)
+        # for p, i in pi_pairs:
+        #     plot_pixelwise_self_sim(p, i)
 
 
 def _evaluate_anomaly_patch_detection(
-    is_anomaly_patch_gt, features, feature_map_shape, save_dir
+    is_anomaly_patch_gt, features, feature_map_shape, gaps, save_dir
 ) -> dict:
 
-    # method_names = ["scs-indep-mean", "lof", "lof-scs-indep-mean"]
-    method_names = ["lof-scs-indep-mean"]
+    
     # method_names = ["lof"]
+    # method_names = ["lofscs"]
+    method_names = ["adalofscs"]
+    # method_names = ["lof", "lofscs", "adalofscs"]
     results = []
     for method_name in method_names:
         _result = _get_result_anomaly_patch_detection(
-            method_name, is_anomaly_patch_gt, features, feature_map_shape
+            method_name, is_anomaly_patch_gt, features, feature_map_shape, gaps,
         )
         results.append(_result)
 
@@ -226,8 +228,13 @@ def _evaluate_anomaly_patch_detection(
 
 
 def _get_result_anomaly_patch_detection(
-    method_name, is_anomaly_patch_gt, features, feature_map_shape
-):
+    method_name, is_anomaly_patch_gt, features, feature_map_shape, gaps
+):  
+    # self_sim = class_size.compute_self_sim(gaps)
+    # th = class_size.compute_th(
+    #     self_sim,
+    #     th_type='symmin',
+    # )
 
     if method_name == "scs-indep-mean":
         _, scs_idxes = class_size.sample_few_shot(
@@ -237,9 +244,14 @@ def _get_result_anomaly_patch_detection(
     elif method_name == "lof":
         _, lof_idxes = LOFSampler().run(features, feature_map_shape)
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lof_idxes)
-    elif method_name == "lof-scs-indep-mean":
+    elif method_name == "lofscs":
         _, lofcsp_idxes = FewShotLOFSampler().run(
             features, feature_map_shape,
+        )
+        is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
+    elif method_name == "adalofscs":
+        _, lofcsp_idxes = FewShotLOFSampler().run(
+            features, feature_map_shape, th_type='symmin'
         )
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
     else:
@@ -286,6 +298,8 @@ def _evaluate_tail_class_detection(
 
     method_names = [
         "scs-indep-mean",
+        "scs-symmin-mean",
+        "scs-symavg-mean",
     ]
 
     results = []
@@ -320,17 +334,15 @@ def _get_result_tail_class_detection(
         _, head_indices = lof_sampler.run(gaps)
         is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
         is_tail_pred = 1 - is_head_pred
-    elif method_name == "lof_scs-indep-mean":
-        lof_sampler = LOFSampler()
-        _, head_indices = lof_sampler.run(gaps, augment_class_sizes=True)
-        is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
-        is_tail_pred = 1 - is_head_pred
-    elif method_class == "scs":
+        class_sizes_pred = torch.zeros((len(gaps, )))
+    elif "scs" in method_name:
         th_type = method_parts[1]
         vote_type = method_parts[2]
         tail_sampler = TailSampler(th_type=th_type, vote_type=vote_type)
         _, tail_indices = tail_sampler.run(gaps)
         is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
+        class_sizes_pred = class_size.sample_few_shot(gaps, th_type=th_type, vote_type=vote_type, return_class_sizes=True)
+
     else:
         raise NotImplementedError()
 
@@ -341,11 +353,15 @@ def _get_result_tail_class_detection(
 
     num_missing_tail = is_missing_tail.sum().item()
     num_included_anomaly = is_included_anomaly.sum().item()
+    class_size_pred_error = (abs(class_sizes_pred - class_sizes_gt) * (1 / class_sizes_gt) * (1 / class_sizes_gt) ).sum().item()
+    tail_pred_acc = abs(is_tail_gt - is_tail_pred).to(torch.float).mean().item()
 
     return {
         "method": method_name,
         "num_missing_tail": num_missing_tail,
         "num_included_anomaly": num_included_anomaly,
+        "tail_pred_acc": tail_pred_acc,
+        "class_size_pred_error":class_size_pred_error,
     }
 
 
@@ -429,7 +445,7 @@ def _convert_class_names_to_labels(class_names):
 
     class_label_names = list(label_map.keys())
 
-    return class_labels, class_label_names
+    return torch.LongTensor(class_labels), class_label_names
 
 
 def _get_result_csc(

@@ -75,7 +75,9 @@ def get_coreset_model(
             sampler_on_gpu=sampler_on_gpu,
             save_dir_path=save_dir_path,
             brute=brute,
-            noise_discriminator_type=getattr(model_config, 'noise_discriminator_type', 'few_shot_lof')
+            noise_discriminate_on_tail_patches=getattr(model_config, 'noise_discriminate_on_tail_patches', False),
+            noise_discriminator_type=getattr(model_config, 'noise_discriminator_type', 'few_shot_lof'),
+            auto_thresholding_on_lof=getattr(model_config, 'auto_thresholding_on_lof', False)
         )
     else:
         raise NotImplementedError()
@@ -272,6 +274,7 @@ class TailedPatch(BaseCore):
         if noise_discriminator_type == 'few_shot_lof':
             self.noise_discriminator = FewShotLOFSampler(
                 device=device if sampler_on_gpu else torch.device("cpu"),
+                auto=auto_thresholding_on_lof
             )
         elif  noise_discriminator_type == 'lof':
             self.noise_discriminator = LOFSampler(
@@ -293,7 +296,6 @@ class TailedPatch(BaseCore):
             self.coreset_path = None
 
         self.noise_discriminate_on_tail_patches = noise_discriminate_on_tail_patches
-        self.auto_thresholding_on_lof = auto_thresholding_on_lof
 
     def fit(self, trainloader: DataLoader, set_predictor=True):
 
@@ -405,9 +407,7 @@ class TailedPatch(BaseCore):
         ].reshape(-1, features.shape[-1])
 
         if self.noise_discriminate_on_tail_patches:
-            tail_features, _ = self.noise_discriminator.run(
-                tail_features, self.feature_map_shape[:2]
-            )
+            tail_features, _ = self.noise_discriminator.run(tail_features)
 
         coreset_tail_features, _ = self.greedy_coreset_sampler.run(tail_features)
 

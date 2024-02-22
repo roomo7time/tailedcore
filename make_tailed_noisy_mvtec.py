@@ -9,25 +9,25 @@ from collections import defaultdict
 
 from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict, save_dicts_to_csv
 
-_MVTEC_CLASS_LIST = [
-    "bottle",
-    "cable",
-    "capsule",
-    "carpet",
-    "grid",
-    "hazelnut",
-    "leather",
-    "metal_nut",
-    "pill",
-    "screw",
-    "tile",
-    "toothbrush",
-    "transistor",
-    "wood",
-    "zipper",
-]
+# _MVTEC_CLASS_LIST = [
+#     "bottle",
+#     "cable",
+#     "capsule",
+#     "carpet",
+#     "grid",
+#     "hazelnut",
+#     "leather",
+#     "metal_nut",
+#     "pill",
+#     "screw",
+#     "tile",
+#     "toothbrush",
+#     "transistor",
+#     "wood",
+#     "zipper",
+# ]
 
-_DATA_CONFIG_ROOT = './data_configs/utn'
+_DATA_CONFIG_ROOT = './data_configs'
 
 
 def _load_data_config(data_config_path):
@@ -70,7 +70,7 @@ def make_data_step(
     seed: int=0,
 ) -> None:
     set_seed(seed)
-    data_config_name = os.path.join(_DATA_CONFIG_ROOT, f'step_nr{int(noise_ratio*100):02d}_k{tail_k}_seed{seed}')
+    data_config_name = os.path.join(_DATA_CONFIG_ROOT, os.path.basename(source_dir), f'step_nr{int(noise_ratio*100):02d}_k{tail_k}_seed{seed}')
 
     if noise_on_tail:
         data_config_name += f"_tailnoised"
@@ -80,6 +80,8 @@ def make_data_step(
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
     else:
+
+        _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
 
         class_list = _MVTEC_CLASS_LIST
         files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
@@ -117,7 +119,7 @@ def make_data_pareto(
     
     set_seed(seed)
 
-    data_config_name = os.path.join(_DATA_CONFIG_ROOT, f'pareto_nr{int(noise_ratio*100):02d}_seed{seed}')
+    data_config_name = os.path.join(_DATA_CONFIG_ROOT, os.path.basename(source_dir), f'pareto_nr{int(noise_ratio*100):02d}_seed{seed}')
 
     if noise_on_tail:
         data_config_name += f"_tailnoised"
@@ -127,6 +129,8 @@ def make_data_pareto(
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
     else:
+
+        _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
 
         class_list = _MVTEC_CLASS_LIST
         files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
@@ -187,19 +191,22 @@ def _get_mvtec_base_file_info(source_dir):
     train_files = {}
     test_files = {}
     anomaly_files = {}
+
+    _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
+
     for class_name in _MVTEC_CLASS_LIST:
         files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name), source_dir, ext="png"
+            os.path.join(source_dir, class_name), source_dir, 
         )
         train_files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name, "train"), source_dir, ext="png"
+            os.path.join(source_dir, class_name, "train"), source_dir, 
         )
         test_files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name, "test"), source_dir, ext="png"
+            os.path.join(source_dir, class_name, "test"), source_dir, 
         )
 
         _test_good_files = list_files_in_folders(
-            os.path.join(source_dir, class_name, "test", "good"), source_dir, ext="png"
+            os.path.join(source_dir, class_name, "test", "good"), source_dir, 
         )
         anomaly_files[class_name] = [
             file for file in test_files[class_name] if file not in _test_good_files
@@ -401,7 +408,23 @@ def _make_file_mapper(
     return file_mapper
 
 
-def list_files_in_folders(directory, source_dir, ext="png"):
+def list_files_in_folders(directory, source_dir, exts=["png", "jpg", "jpeg", "JPG", "JPEG"]):
+    """
+    List all files with given extensions in a directory and its subdirectories.
+
+    :param directory: The path to the directory to search in.
+    :param source_dir: The source directory to calculate relative paths.
+    :param exts: The file extensions to look for (default is ['png', 'jpg', 'jpeg']).
+    :return: A list of paths to files with the specified extensions.
+    """
+    all_files = []
+    for ext in exts:
+        files = _list_files_in_folders(directory, source_dir, ext)
+        all_files.extend(files)
+
+    return all_files
+
+def _list_files_in_folders(directory, source_dir, ext="png"):
     """
     List all files with a given extension in a directory and its subdirectories using glob.
 
@@ -509,22 +532,38 @@ def is_in_mvtec_train_folder(file_path, base_dir):
     parts = rel_path.split(os.sep)
     return "train" in parts and parts.index("train") == 1
 
+def get_subdirectories(directory_path):
+    """
+    Returns a list of subdirectory names found in the given directory path.
 
+    Args:
+    directory_path (str): The path to the directory whose subdirectories are to be listed.
+
+    Returns:
+    list: A list of subdirectory names.
+    """
+    subdirectories = [d for d in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, d))]
+    return subdirectories
 
 
 
 def main():
     # arguments
-    # tail_type = "step"
-    tail_type = "pareto"
+    tail_type = "step"
+    # tail_type = "pareto"
     seed = 0
 
-    tail_k = 1  # 4 or 1
+    tail_k = 4  # 4 or 1
     noise_on_tail = False
     noise_ratio = 0.1
 
-    source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec_anomaly_detection"
-    target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_mvtec_{tail_type}_nr{int(noise_ratio*100):02d}"
+    # mvtec
+    # source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec_anomaly_detection"
+    # target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_mvtec_{tail_type}_nr{int(noise_ratio*100):02d}"
+
+    # visa_
+    source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa_"
+    target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_visa_{tail_type}_nr{int(noise_ratio*100):02d}"
 
     if tail_type == "step" and tail_k is not None:
         target_dir += f"_k{tail_k}"

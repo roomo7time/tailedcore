@@ -77,12 +77,15 @@ def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_si
 # FIXME: this function is not robust. needs to be revised
 def predict_max_few_shot_class_size(num_samples_per_class: torch.FloatTensor) -> float:
     
-    idx = detect_max_step(num_samples_per_class, round_arr=False)
+    idx = detect_max_step(num_samples_per_class, quantize=True)
     
     return num_samples_per_class[idx].item()
 
 
-def predict_few_shot_class_samples(class_sizes: torch.Tensor, wide_cover: bool = True) -> torch.Tensor:
+
+
+
+def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
 
     num_samples_per_class = predict_num_samples_per_class(class_sizes)
 
@@ -94,21 +97,21 @@ def predict_few_shot_class_samples(class_sizes: torch.Tensor, wide_cover: bool =
     few_shot_idxes = (class_sizes <= max_K).to(torch.long)
     return few_shot_idxes
 
-def _detect_max_step_idx(arr: torch.FloatTensor, quantize=True, factor=1.):
-    if quantize:
-        # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
-        arr = torch.round(arr*factor)
-        arr = arr.to(torch.long)
-    sorted_arr = torch.sort(arr, descending=True)[0]
-    # utils.plot_scores(sorted_arr, markersize=2, alpha=1)
-    sorted_arr_shifted = torch.empty_like(sorted_arr)
-    sorted_arr_shifted[0:-1] = sorted_arr[1:]
-    sorted_arr_shifted[-1] = sorted_arr[-1]
+# def _detect_max_step_idx(arr: torch.FloatTensor, quantize=True, factor=1.):
+#     if quantize:
+#         # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
+#         arr = torch.round(arr*factor)
+#         arr = arr.to(torch.long)
+#     sorted_arr = torch.sort(arr, descending=True)[0]
+#     # utils.plot_scores(sorted_arr, markersize=2, alpha=1)
+#     sorted_arr_shifted = torch.empty_like(sorted_arr)
+#     sorted_arr_shifted[0:-1] = sorted_arr[1:]
+#     sorted_arr_shifted[-1] = sorted_arr[-1]
 
-    factors = sorted_arr / sorted_arr_shifted
-    idx = min(int(factors.argmax()) + 1, len(sorted_arr) - 1)
+#     factors = sorted_arr / sorted_arr_shifted
+#     idx = min(int(factors.argmax()) + 1, len(sorted_arr) - 1)
 
-    return idx
+#     return idx
 
 def detect_max_step(arr: torch.FloatTensor, quantize=True, factor=1.):
     if quantize:
@@ -154,7 +157,7 @@ def compute_sym_th(self_sim: torch.Tensor, mode="min", within=False) -> float:
 
     _factor = 1
     if within:
-        _factor = 2
+        _factor = np.sqrt(2)
 
     minimum = compute_self_sim_min(self_sim, mode=mode)
     th = torch.cos(torch.acos(minimum) / (2*_factor)).item()
@@ -172,10 +175,6 @@ def _compute_th(self_sim: torch.Tensor, th_type="symmin", within=False) -> float
         th = compute_sym_th(self_sim, mode="min", within=within)
     elif th_type == "symavg":
         th = compute_sym_th(self_sim, mode="avg", within=within)
-    # elif th_type == "random-approx":
-    #     th = np.cos(
-    #         np.arccos(1 / np.sqrt(1024)) / 2
-    #     )  # FIXME: 1024 is hard-coded at the momoent; fix it
     elif th_type == "indep":
         th = np.cos(np.pi / (4*_factor))
     else:
@@ -188,7 +187,7 @@ def compute_th(
     self_sim: torch.Tensor,
     num_bootstrapping=1,
     subsampling_ratio=1.0,
-    th_type="sym-min",
+    th_type="symmin",
     within=False,
 ) -> float:
 
@@ -258,6 +257,7 @@ def _sample_few_shot(
         subsampling_ratio=subsampling_ratio,
         th_type=th_type,
     )
+    
     class_sizes = predict_class_sizes(self_sim, th=th, vote_type=vote_type)
     if return_class_sizes:
         return class_sizes
@@ -272,7 +272,7 @@ def _sample_few_shot(
 def _sample_patchwise_few_shot(
     features: torch.Tensor,
     fea_map_shape,
-    th_type="random-ideal-within",
+    th_type="indep",
     vote_type="mean",
     num_bootstrapping=1,
     subsampling_ratio=1.0,
