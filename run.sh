@@ -20,6 +20,7 @@ for seed in {0..9}; do
     for data_name in "${DATA_NAMES[@]}"; do
         for config_name in "${CONFIG_NAMES[@]}"; do
             # python evaluate.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
+            python extract_artifacts.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
             python analyze_extracted.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
         done
     done

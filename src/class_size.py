@@ -11,8 +11,6 @@ from scipy.stats import mode
 
 def compute_self_sim(X: torch.Tensor, normalize: bool = True) -> torch.Tensor:
 
-    gc.collect()
-
     if normalize:
         X = F.normalize(X, dim=-1)
 
@@ -325,13 +323,12 @@ def _sample_patchwise_few_shot(
     )  # (num_patches, n, c)
     b = patchwise_features.shape[1]
 
-    patchwise_self_sim = compute_self_sim(patchwise_features, normalize=True)
-
     patchwise_class_sizes = torch.empty((b, num_pixels), dtype=torch.float)
     patchwise_few_shot_idxes = torch.empty((b, num_pixels), dtype=torch.long)
 
     def _compute_patchwise_few_shot_idxes(p):
-        _self_sim = patchwise_self_sim[p]
+        _features = patchwise_features[p]
+        _self_sim = compute_self_sim(_features, normalize=True)
         _th = compute_th(
             _self_sim,
             num_bootstrapping=num_bootstrapping,
