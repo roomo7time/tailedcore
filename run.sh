@@ -1,13 +1,26 @@
 #!/bin/bash
 
+for seed in {0..9}; do
+    DATA_NAMES=(
+        "symlink_mvtec_pareto_nr10_seed${seed}" 
+        "symlink_mvtec_step_nr10_k1_seed${seed}" 
+        "symlink_mvtec_step_nr10_k4_seed${seed}"
+        "symlink_visa_pareto_nr10_seed${seed}"
+        "symlink_visa_step_nr10_k1_seed${seed}"
+        "symlink_visa_step_nr10_k4_seed${seed}"
+    )
 
+    CONFIG_NAMES=(
+        "tailedpatch_mvtec_01"
+        "tailedpatch_mvtec_05"
+        "tailedpatch_mvtec_06"
+        "tailedpatch_mvtec_07"
+    )
 
-
-
-DATA_NAMES=("symlink_mvtec_pareto_nr10_seed0" "symlink_mvtec_pareto_nr10_seed2" "symlink_mvtec_step_nr10_k1_seed0" "symlink_mvtec_step_nr10_k1_seed7" "symlink_mvtec_step_nr10_k4_seed0" "symlink_mvtec_step_nr10_k4_seed7")
-
-for data_name in "${DATA_NAMES[@]}"; do
-    python evaluate.py --data_sub_path "anomaly_detection/${data_name}" --config_name "augtailedpatch_mvtec_01"
-    # python analyze_extracted.py --data_sub_path "anomaly_detection/${data_name}"
+    for data_name in "${DATA_NAMES[@]}"; do
+        for config_name in "${CONFIG_NAMES[@]}"; do
+            # python evaluate.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
+            python analyze_extracted.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
+        done
+    done
 done
-

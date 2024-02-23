@@ -66,9 +66,9 @@ def analyze_extracted(args):
     save_data_info_path = os.path.join("./artifacts", args.data_name, 'num_samples_per_class.csv')
     utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
 
-    analyze_gap(
-        gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
-    )
+    # analyze_gap(
+    #     gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
+    # )
     analyze_patch(feas, masks, gaps, save_train_dir_path, save_plot=False)
 
 
@@ -215,7 +215,7 @@ def _evaluate_anomaly_patch_detection(
     # method_names = ["lof"]
     # method_names = ["lofscs"]
     # method_names = ["adalofscs"]
-    method_names = ["lof", "lofscs", "adalofscs"]
+    method_names = ["lofscs", "lof",  "adalofscs"]
     results = []
     for method_name in method_names:
         _result = _get_result_anomaly_patch_detection(
@@ -299,8 +299,8 @@ def _evaluate_tail_class_detection(
     # ]
 
     method_names = [
-        "scs-indep-mean",
         "scs-symmin-mean",
+        "scs-indep-mean",
         "scs-symavg-mean",
     ]
 

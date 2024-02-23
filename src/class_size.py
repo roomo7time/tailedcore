@@ -1,5 +1,6 @@
 import torch
 import time
+import gc
 import numpy as np
 import torch.nn.functional as F
 from joblib import Parallel, delayed
@@ -9,6 +10,9 @@ from . import utils
 from scipy.stats import mode
 
 def compute_self_sim(X: torch.Tensor, normalize: bool = True) -> torch.Tensor:
+
+    gc.collect()
+
     if normalize:
         X = F.normalize(X, dim=-1)
 
@@ -52,8 +56,8 @@ def predict_class_sizes(self_sim: torch.Tensor, th, vote_type="mean") -> torch.T
     return class_sizes.to(torch.float)
 
 
-
-def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_sizes=True) -> torch.FloatTensor:
+# old
+def _predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_sizes=True) -> torch.FloatTensor:
     # FIXME: topk average is required for robustness
     if round_class_sizes:
         class_sizes = torch.round(class_sizes).to(torch.long)
@@ -74,12 +78,37 @@ def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_si
     return torch.FloatTensor(num_samples_per_class)
 
 
-# FIXME: this function is not robust. needs to be revised
-def predict_max_few_shot_class_size(num_samples_per_class: torch.FloatTensor) -> float:
+# old
+def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_sizes=True) -> torch.FloatTensor:
+    # FIXME: topk average is required for robustness
+    if round_class_sizes:
+        class_sizes = torch.round(class_sizes).to(torch.long)
+    _class_sizes_sorted = torch.sort(class_sizes, descending=False)[0]
+    class_sizes_sorted = torch.maximum(_class_sizes_sorted, torch.ones_like(_class_sizes_sorted))
+
+    num_samples_per_class = []
+
+    while len(class_sizes_sorted) > 0:
+
+        if len(class_sizes_sorted) < class_sizes_sorted[0]:
+            num_samples_per_class[-1] += len(class_sizes_sorted)
+            break
+
+        _num_samples_in_current_class = class_sizes_sorted[0]
+        _num_samples_in_current_class = torch.round(class_sizes_sorted[:_num_samples_in_current_class].float().mean()).long().item()
+        _num_samples_in_current_class = min(_num_samples_in_current_class, len(class_sizes_sorted))
+        num_samples_per_class.append(_num_samples_in_current_class)
+        class_sizes_sorted = class_sizes_sorted[_num_samples_in_current_class:]
+
+    return torch.FloatTensor(num_samples_per_class)
+
+
+# # FIXME: this function is not robust. needs to be revised
+# def predict_max_few_shot_class_size(num_samples_per_class: torch.FloatTensor) -> float:
     
-    idx = detect_max_step(num_samples_per_class, quantize=True)
+#     idx = detect_max_step(num_samples_per_class, quantize=True)
     
-    return num_samples_per_class[idx].item()
+#     return num_samples_per_class[idx].item()
 
 
 
@@ -88,6 +117,7 @@ def predict_max_few_shot_class_size(num_samples_per_class: torch.FloatTensor) ->
 def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
 
     num_samples_per_class = predict_num_samples_per_class(class_sizes)
+    num_samples_per_class = num_samples_per_class.sort(descending=True)[0]
 
     _num_samples_per_class = torch.cat([torch.arange(len(num_samples_per_class))[:, None], num_samples_per_class[:, None]], dim=1)
     ods = compute_orthogonal_distances(_num_samples_per_class, _num_samples_per_class[[0, -1], :])
@@ -96,6 +126,8 @@ def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
     
     few_shot_idxes = (class_sizes <= max_K).to(torch.long)
     return few_shot_idxes
+
+
 
 # def _detect_max_step_idx(arr: torch.FloatTensor, quantize=True, factor=1.):
 #     if quantize:
@@ -113,21 +145,21 @@ def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
 
 #     return idx
 
-def detect_max_step(arr: torch.FloatTensor, quantize=True, factor=1.):
-    if quantize:
-        # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
-        _arr = torch.round(arr*factor)
-        _arr = _arr.to(torch.long)
-    sorted_arr = torch.sort(_arr, descending=True)[0]
+# def detect_max_step(arr: torch.FloatTensor, quantize=True, factor=1.):
+#     if quantize:
+#         # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
+#         _arr = torch.round(arr*factor)
+#         _arr = _arr.to(torch.long)
+#     sorted_arr = torch.sort(_arr, descending=True)[0]
     
-    _line = [torch.FloatTensor([0, sorted_arr[0].item()]), torch.FloatTensor([len(sorted_arr), sorted_arr[-1].item()])]
-    _points = torch.cat([torch.arange(len(sorted_arr)).to(torch.float)[:, None], sorted_arr[:, None]], dim=1)
-    ods = compute_orthogonal_distances(_points, _line)
-    max_od_idx = ods.argmax() + 1
+#     _line = [torch.FloatTensor([0, sorted_arr[0].item()]), torch.FloatTensor([len(sorted_arr), sorted_arr[-1].item()])]
+#     _points = torch.cat([torch.arange(len(sorted_arr)).to(torch.float)[:, None], sorted_arr[:, None]], dim=1)
+#     ods = compute_orthogonal_distances(_points, _line)
+#     max_od_idx = ods.argmax() + 1
 
-    max_od_val = sorted_arr[max_od_idx] / factor
+#     max_od_val = sorted_arr[max_od_idx] / factor
 
-    return max_od_val
+#     return max_od_val
 
 def compute_self_sim_min(self_sim: torch.Tensor, mode="min") -> torch.Tensor:
     mins = torch.empty(len(self_sim))
@@ -283,6 +315,7 @@ def _sample_patchwise_few_shot(
         features: (n*h*w, c). To revert it back to feature map, the below is required.
         (n*h*w, c) -> (n, h*w, c) -> (n, c, h*w) -> (n, c, h, w)
     """
+
     fea_dim = features.shape[1]
     h, w = fea_map_shape[0], fea_map_shape[1]
     num_pixels = h * w
