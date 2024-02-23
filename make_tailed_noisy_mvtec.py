@@ -549,12 +549,10 @@ def get_subdirectories(directory_path):
 
 def main(seed):
     # arguments
-    # tail_type = "step"
-    tail_type = "pareto"
+    tail_type = "step"
+    # tail_type = "pareto"
 
-    seed = 0
-
-    tail_k = 1  # 4 or 1
+    tail_k = 4  # 4 or 1
     noise_on_tail = False
     noise_ratio = 0.1
 
@@ -596,6 +594,6 @@ def main(seed):
 
 
 if __name__ == "__main__":
-    
-    main()
+    for seed in range(10):
+        main(seed)
     

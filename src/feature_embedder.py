@@ -136,6 +136,8 @@ class FeatureEmbedder(torch.nn.Module):
             return _detach(features), patch_shapes
 
         if return_embeddings:
+            if embeddings.ndim == 4:
+                embeddings = embeddings[:, :, 0, 0]
             return _detach(features), _detach(embeddings)
 
         return _detach(features)

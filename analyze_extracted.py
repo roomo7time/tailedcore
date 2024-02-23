@@ -69,15 +69,17 @@ def analyze_extracted(args):
     analyze_gap(
         gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
     )
-    # analyze_patch(feas, masks, gaps, save_train_dir_path, save_plot=False)
+    analyze_patch(feas, masks, gaps, save_train_dir_path, save_plot=False)
 
 
-def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=True):
+def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=False):
 
     if gaps.ndim == 4:
         gaps = gaps[:, :, 0, 0]
 
     class_labels, class_label_names = _convert_class_names_to_labels(class_names)
+    class_labels = class_labels.numpy()
+
     is_anomaly_gt = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
 
     _evaluate_tail_class_detection(
@@ -106,7 +108,7 @@ def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=True)
 
         def plot_gap_self_sim(index):
             print(f"plotting ngap for {index}")
-            _scores = self_sim[index]
+            _scores = self_sim[index].numpy()
             _is_anomaly = _anomaly_labels[index]
             _is_few_shot = _few_shot_labels[index]
             if _is_anomaly:
@@ -124,10 +126,10 @@ def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=True)
                 filename=_filename,
             )
 
-        Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
+        # Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
 
-        # for i in range(len(self_sim)):
-        #     plot_gap_self_sim(i)
+        for i in range(len(self_sim)):
+            plot_gap_self_sim(i)
 
 
 def analyze_patch(
@@ -354,7 +356,7 @@ def _get_result_tail_class_detection(
     num_missing_tail = is_missing_tail.sum().item()
     num_included_anomaly = is_included_anomaly.sum().item()
     class_size_pred_error = (abs(class_sizes_pred - class_sizes_gt) * (1 / class_sizes_gt) * (1 / class_sizes_gt) ).sum().item()
-    tail_pred_acc = abs(is_tail_gt - is_tail_pred).to(torch.float).mean().item()
+    tail_pred_acc = 1 - abs(is_tail_gt - is_tail_pred).to(torch.float).mean().item()
 
     return {
         "method": method_name,

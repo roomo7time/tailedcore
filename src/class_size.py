@@ -152,12 +152,12 @@ def compute_min(scores: torch.Tensor) -> torch.Tensor:
 def _compute_min(scores: torch.Tensor) -> torch.Tensor:
     return scores.min()
 
-
+_WITHIN_FACTOR = 2
 def compute_sym_th(self_sim: torch.Tensor, mode="min", within=False) -> float:
 
     _factor = 1
     if within:
-        _factor = np.sqrt(2)
+        _factor = _WITHIN_FACTOR
 
     minimum = compute_self_sim_min(self_sim, mode=mode)
     th = torch.cos(torch.acos(minimum) / (2*_factor)).item()
@@ -169,14 +169,14 @@ def _compute_th(self_sim: torch.Tensor, th_type="symmin", within=False) -> float
 
     _factor = 1
     if within:
-        _factor = 2
+        _factor = _WITHIN_FACTOR
 
     if th_type == "symmin":
         th = compute_sym_th(self_sim, mode="min", within=within)
     elif th_type == "symavg":
         th = compute_sym_th(self_sim, mode="avg", within=within)
     elif th_type == "indep":
-        th = np.cos(np.pi / (4*_factor))
+        th = np.cos((np.pi/2) / (2*_factor))
     else:
         raise NotImplementedError()
 
