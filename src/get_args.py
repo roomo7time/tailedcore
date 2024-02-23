@@ -21,8 +21,8 @@ def parse_args():
         # default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed0",
         # default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed7",
         # default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed0",
-        default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed7",
-        # default="anomaly_detection/symlink_mvtec_pareto_nr10_seed0",
+        # default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed7",
+        default="anomaly_detection/symlink_mvtec_pareto_nr10_seed0",
         # default="anomaly_detection/symlink_mvtec_pareto_nr10_seed2",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
