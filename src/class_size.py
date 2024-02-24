@@ -9,6 +9,7 @@ from . import utils
 
 from scipy.stats import mode
 
+
 def compute_self_sim(X: torch.Tensor, normalize: bool = True) -> torch.Tensor:
 
     if normalize:
@@ -54,35 +55,16 @@ def predict_class_sizes(self_sim: torch.Tensor, th, vote_type="mean") -> torch.T
     return class_sizes.to(torch.float)
 
 
-# old
-def _predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_sizes=True) -> torch.FloatTensor:
-    # FIXME: topk average is required for robustness
-    if round_class_sizes:
-        class_sizes = torch.round(class_sizes).to(torch.long)
-    _class_sizes_sorted = torch.sort(class_sizes, descending=True)[0]
-    class_sizes_sorted = torch.maximum(_class_sizes_sorted, torch.ones_like(_class_sizes_sorted))
-
-    num_samples_per_class = []
-
-    while len(class_sizes_sorted) > 0:
-        _num_samples_in_current_class = min(
-            class_sizes_sorted[0], len(class_sizes_sorted)
-        )
-        _num_samples_in_current_class = torch.round(class_sizes_sorted[:_num_samples_in_current_class].float().mean()).long().item()
-        _num_samples_in_current_class = min(_num_samples_in_current_class, len(class_sizes_sorted))
-        num_samples_per_class.append(_num_samples_in_current_class)
-        class_sizes_sorted = class_sizes_sorted[_num_samples_in_current_class:]
-
-    return torch.FloatTensor(num_samples_per_class)
-
-
-# old
-def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_sizes=True) -> torch.FloatTensor:
+def predict_num_samples_per_class(
+    class_sizes: torch.FloatTensor, round_class_sizes=True
+) -> torch.FloatTensor:
     # FIXME: topk average is required for robustness
     if round_class_sizes:
         class_sizes = torch.round(class_sizes).to(torch.long)
     _class_sizes_sorted = torch.sort(class_sizes, descending=False)[0]
-    class_sizes_sorted = torch.maximum(_class_sizes_sorted, torch.ones_like(_class_sizes_sorted))
+    class_sizes_sorted = torch.maximum(
+        _class_sizes_sorted, torch.ones_like(_class_sizes_sorted)
+    )
 
     num_samples_per_class = []
 
@@ -93,70 +75,42 @@ def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_si
             break
 
         _num_samples_in_current_class = class_sizes_sorted[0]
-        _num_samples_in_current_class = torch.round(class_sizes_sorted[:_num_samples_in_current_class].float().mean()).long().item()
-        _num_samples_in_current_class = min(_num_samples_in_current_class, len(class_sizes_sorted))
+        _num_samples_in_current_class = (
+            torch.round(
+                class_sizes_sorted[:_num_samples_in_current_class].float().mean()
+            )
+            .long()
+            .item()
+        )
+        _num_samples_in_current_class = min(
+            _num_samples_in_current_class, len(class_sizes_sorted)
+        )
         num_samples_per_class.append(_num_samples_in_current_class)
         class_sizes_sorted = class_sizes_sorted[_num_samples_in_current_class:]
 
     return torch.FloatTensor(num_samples_per_class).sort(descending=True)[0]
 
 
-# # FIXME: this function is not robust. needs to be revised
-# def predict_max_few_shot_class_size(num_samples_per_class: torch.FloatTensor) -> float:
-    
-#     idx = detect_max_step(num_samples_per_class, quantize=True)
-    
-#     return num_samples_per_class[idx].item()
-
-
-
-
-
 def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
 
     num_samples_per_class = predict_num_samples_per_class(class_sizes)
 
-    _num_samples_per_class = torch.cat([torch.arange(len(num_samples_per_class))[:, None], num_samples_per_class[:, None]], dim=1)
-    ods = compute_orthogonal_distances(_num_samples_per_class, _num_samples_per_class[[0, -1], :])
+    _num_samples_per_class = torch.cat(
+        [
+            torch.arange(len(num_samples_per_class))[:, None],
+            num_samples_per_class[:, None],
+        ],
+        dim=1,
+    )
+    ods = compute_orthogonal_distances(
+        _num_samples_per_class, _num_samples_per_class[[0, -1], :]
+    )
     max_K_idx = ods.argmax() + 1
     max_K = num_samples_per_class[max_K_idx].item()
-    
+
     few_shot_idxes = (class_sizes <= max_K).to(torch.long)
     return few_shot_idxes
 
-
-
-# def _detect_max_step_idx(arr: torch.FloatTensor, quantize=True, factor=1.):
-#     if quantize:
-#         # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
-#         arr = torch.round(arr*factor)
-#         arr = arr.to(torch.long)
-#     sorted_arr = torch.sort(arr, descending=True)[0]
-#     # utils.plot_scores(sorted_arr, markersize=2, alpha=1)
-#     sorted_arr_shifted = torch.empty_like(sorted_arr)
-#     sorted_arr_shifted[0:-1] = sorted_arr[1:]
-#     sorted_arr_shifted[-1] = sorted_arr[-1]
-
-#     factors = sorted_arr / sorted_arr_shifted
-#     idx = min(int(factors.argmax()) + 1, len(sorted_arr) - 1)
-
-#     return idx
-
-# def detect_max_step(arr: torch.FloatTensor, quantize=True, factor=1.):
-#     if quantize:
-#         # arr = factor*torch.maximum(torch.round(arr), torch.ones_like(arr))
-#         _arr = torch.round(arr*factor)
-#         _arr = _arr.to(torch.long)
-#     sorted_arr = torch.sort(_arr, descending=True)[0]
-    
-#     _line = [torch.FloatTensor([0, sorted_arr[0].item()]), torch.FloatTensor([len(sorted_arr), sorted_arr[-1].item()])]
-#     _points = torch.cat([torch.arange(len(sorted_arr)).to(torch.float)[:, None], sorted_arr[:, None]], dim=1)
-#     ods = compute_orthogonal_distances(_points, _line)
-#     max_od_idx = ods.argmax() + 1
-
-#     max_od_val = sorted_arr[max_od_idx] / factor
-
-#     return max_od_val
 
 def compute_self_sim_min(self_sim: torch.Tensor, mode="min") -> torch.Tensor:
     mins = torch.empty(len(self_sim))
@@ -181,7 +135,10 @@ def compute_min(scores: torch.Tensor) -> torch.Tensor:
 def _compute_min(scores: torch.Tensor) -> torch.Tensor:
     return scores.min()
 
+
 _WITHIN_FACTOR = 2
+
+
 def compute_sym_th(self_sim: torch.Tensor, mode="min", within=False) -> float:
 
     _factor = 1
@@ -189,7 +146,7 @@ def compute_sym_th(self_sim: torch.Tensor, mode="min", within=False) -> float:
         _factor = _WITHIN_FACTOR
 
     minimum = compute_self_sim_min(self_sim, mode=mode)
-    th = torch.cos(torch.acos(minimum) / (2*_factor)).item()
+    th = torch.cos(torch.acos(minimum) / (2 * _factor)).item()
 
     return th
 
@@ -205,7 +162,7 @@ def _compute_th(self_sim: torch.Tensor, th_type="symmin", within=False) -> float
     elif th_type == "symavg":
         th = compute_sym_th(self_sim, mode="avg", within=within)
     elif th_type == "indep":
-        th = np.cos((np.pi/2) / (2*_factor))
+        th = np.cos((np.pi / 2) / (2 * _factor))
     else:
         raise NotImplementedError()
 
@@ -244,7 +201,7 @@ def compute_th(
 def sample_few_shot(
     X: torch.Tensor,
     fea_map_shape: bool = None,
-    th_type: str = "indep",
+    th_type: str = "symmin",
     vote_type: str = "mean",
     num_bootstrapping: int = 1,
     subsampling_ratio: float = 1.0,
@@ -273,7 +230,7 @@ def sample_few_shot(
 
 def _sample_few_shot(
     X: torch.Tensor,
-    th_type="sym-min",
+    th_type="symmin",
     vote_type="mean",
     num_bootstrapping=1,
     subsampling_ratio=1.0,
@@ -286,7 +243,7 @@ def _sample_few_shot(
         subsampling_ratio=subsampling_ratio,
         th_type=th_type,
     )
-    
+
     class_sizes = predict_class_sizes(self_sim, th=th, vote_type=vote_type)
     if return_class_sizes:
         return class_sizes
@@ -301,7 +258,7 @@ def _sample_few_shot(
 def _sample_patchwise_few_shot(
     features: torch.Tensor,
     fea_map_shape,
-    th_type="indep",
+    th_type="symmin",
     vote_type="mean",
     num_bootstrapping=1,
     subsampling_ratio=1.0,
@@ -333,7 +290,7 @@ def _sample_patchwise_few_shot(
             num_bootstrapping=num_bootstrapping,
             subsampling_ratio=subsampling_ratio,
             th_type=th_type,
-            within=True
+            within=True,
         )
 
         _class_sizes = predict_class_sizes(_self_sim, th=_th, vote_type=vote_type)
@@ -356,7 +313,9 @@ def _sample_patchwise_few_shot(
     return sample_features, sample_indices
 
 
-def compute_orthogonal_distances(points: torch.Tensor, line_points: list) -> torch.Tensor:
+def compute_orthogonal_distances(
+    points: torch.Tensor, line_points: list
+) -> torch.Tensor:
 
     points = points.numpy()
 
@@ -381,13 +340,12 @@ def compute_orthogonal_distances(points: torch.Tensor, line_points: list) -> tor
         y_intersect = m * x_intersect + c
 
         # Distance from point to line
-        distance = np.sqrt((x_intersect - x)**2 + (y_intersect - y)**2)
+        distance = np.sqrt((x_intersect - x) ** 2 + (y_intersect - y) ** 2)
         distances.append(distance)
 
     distances = torch.FloatTensor(distances)
 
     return distances
-
 
 
 if __name__ == "__main__":

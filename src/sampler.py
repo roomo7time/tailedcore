@@ -455,6 +455,41 @@ class GreedyCoresetSampler(BaseSampler):
         return (-2 * a_times_b + a_times_a + b_times_b).clamp(0, None).sqrt().cpu()
 
 
+class TailSampler(BaseSampler):
+    def __init__(
+        self,
+        th_type: "str" = "indep",
+        vote_type: "str" = "mean",
+    ):
+        self.th_type = th_type
+        self.vote_type = vote_type
+
+    def run(self, 
+            features: torch.Tensor, 
+            feature_map_shape: torch.Tensor = None,
+            return_class_sizes: bool = False,):
+
+        tail_samples, tail_indices = class_size.sample_few_shot(
+            X=features,
+            fea_map_shape=feature_map_shape,
+            th_type=self.th_type,
+            vote_type=self.vote_type,
+        )
+
+        if return_class_sizes:
+            class_sizes_pred = class_size.sample_few_shot(
+                X=features,
+                fea_map_shape=feature_map_shape,
+                th_type=self.th_type,
+                vote_type=self.vote_type,
+                return_class_sizes=True
+            )
+
+            return tail_samples, tail_indices, class_sizes_pred
+
+        return tail_samples, tail_indices
+
+
 class LOFSampler(BaseSampler):
     def __init__(
         self,
@@ -473,6 +508,7 @@ class LOFSampler(BaseSampler):
         self,
         features: torch.Tensor,
         feature_map_shape: torch.Tensor = None,
+        return_outlier_scores: bool = False
     ):
         # if feature_map_shape is provided, patchwise
         reduced_features = self._reduce_features(features)
@@ -485,7 +521,9 @@ class LOFSampler(BaseSampler):
         sample_indices = torch.where(lof_scores < thresh)[0]
 
         sample_features = features[sample_indices]
-
+        
+        if return_outlier_scores:
+            return sample_features, sample_indices, lof_scores
         return sample_features, sample_indices
 
     def _compute_lof_scores(
@@ -551,120 +589,7 @@ class LOFSampler(BaseSampler):
         return reduced_features.clone().detach()
 
 
-# class TailSampler(BaseSampler):
-#     def __init__(
-#         self,
-#         th_type: "str" = "indep",
-#         vote_type: "str" = "mean",
-#     ):
-#         self.th_type = th_type
-#         self.vote_type = vote_type
-
-#     def run(self, features: torch.Tensor, feature_map_shape: torch.Tensor = None):
-
-#         if feature_map_shape is not None:
-#             return self._run_patch(features, feature_map_shape)
-
-#         return self._run(features)
-
-#     def _compute_th(self, self_sim, within=False):
-#         _th = class_size.compute_th(
-#             self_sim,
-#             th_type=self.th_type,
-#             within=within
-#         )
-#         if not within:
-#             self._th = _th
-#         return _th
-
-#     def _run(self, features: torch.Tensor):
-#         self_sim = class_size.compute_self_sim(features, normalize=True)
-
-#         th = self._compute_th(self_sim)
-
-#         class_sizes = class_size.predict_class_sizes(self_sim, th=th, vote_type=self.vote_type)
-
-#         is_few_shot = class_size.predict_few_shot_class_samples(class_sizes)
-
-#         sample_indices = torch.where(is_few_shot == 1)[0]
-
-#         return features[sample_indices], sample_indices
-
-#     def _run_patch(self, features: torch.Tensor, feature_map_shape: torch.Tensor):
-#         fea_dim = features.shape[1]
-#         h, w = feature_map_shape[0], feature_map_shape[1]
-#         num_pixels = h * w
-
-#         patchwise_features = features.reshape(-1, num_pixels, fea_dim).permute(
-#             1, 0, 2
-#         )  # (num_patches, n, c)
-#         b = patchwise_features.shape[1]
-
-#         patchwise_self_sim = class_size.compute_self_sim(patchwise_features, normalize=True)
-
-#         patchwise_class_sizes = torch.empty((b, num_pixels), dtype=torch.float)
-#         patchwise_few_shot_idxes = torch.empty((b, num_pixels), dtype=torch.long)
-
-#         def _compute_patchwise_few_shot_idxes(p):
-#             _self_sim = patchwise_self_sim[p]
-#             _th = self._compute_th(_self_sim, within=True)
-
-#             _class_sizes = class_size.predict_class_sizes(_self_sim, th=_th, vote_type=self.vote_type)
-#             patchwise_class_sizes[:, p] = _class_sizes
-
-#         for p in tqdm(range(num_pixels), desc="Computing patchwise few-shot idxes"):
-#             _compute_patchwise_few_shot_idxes(p)
-
-#         sample_indices = patchwise_few_shot_idxes.reshape((-1,))
-#         sample_features = features[sample_indices]
-
-#         return sample_features, sample_indices
-
-#     def return_th(self):
-#         assert hasattr(self, '_th'), 'First, run.'
-#         return self._th
-
-# class CustomTailSampler(TailSampler):
-#     def __init__(
-#         self,
-#         th,
-#         vote_type: "str" = "mean",
-#     ):
-#         self.th = th
-#         self.vote_type = vote_type
-
-#     def run(self, features: torch.Tensor, feature_map_shape: torch.Tensor = None):
-
-#         if feature_map_shape is not None:
-#             return self._run_patch(features, feature_map_shape)
-
-#         return self._run(features)
-
-#     def _compute_th(self, self_sim, within=False):
-#         _th = self._th
-#         return _th
-
-
-class TailSampler(BaseSampler):
-    def __init__(
-        self,
-        th_type: "str" = "indep",
-        vote_type: "str" = "mean",
-    ):
-        self.th_type = th_type
-        self.vote_type = vote_type
-
-    def run(self, features: torch.Tensor, feature_map_shape: torch.Tensor = None):
-
-        return class_size.sample_few_shot(
-            X=features,
-            fea_map_shape=feature_map_shape,
-            th_type=self.th_type,
-            vote_type=self.vote_type,
-        )
-
-
-class FewShotLOFSampler(LOFSampler):
+class TailedLOFSampler(LOFSampler):
 
     def __init__(
         self,
@@ -672,153 +597,60 @@ class FewShotLOFSampler(LOFSampler):
         lof_k: int = 6,  # 6
         dimension_to_project_features_to=128,
         device: torch.device = torch.device("cpu"),
-        auto: bool = False,
+        tail_th_type: str = "symmin",
+        without_lof: bool = False,
     ):
         super().__init__(percentage, lof_k, dimension_to_project_features_to, device)
 
-        self.auto = auto
+        self.tail_th_type = tail_th_type
+        self.without_lof = without_lof
 
     def run(
         self,
         features: torch.Tensor,
         feature_map_shape: torch.Tensor = None,
-        th_type="indep",
+        return_outlier_scores: bool = False,  # FIXME: only for ablation
     ):
-        # if feature_map_shape is provided, patchwise
+
         reduced_features = self._reduce_features(features)
 
         class_sizes = class_size.sample_few_shot(
             reduced_features,
             feature_map_shape,
-            th_type=th_type,
+            th_type=self.tail_th_type,
             return_class_sizes=True,
         )
 
-        lof_scores = self._compute_lof_scores(
-            reduced_features,
-            feature_map_shape,
-        )
+        lof_scores = torch.ones_like(class_sizes)
+        if not self.without_lof:
+            lof_scores = self._compute_lof_scores(
+                reduced_features,
+                feature_map_shape,
+            )
 
-        sample_indices = self._compute_sample_indices(lof_scores, class_sizes)
+        sample_indices, outlier_scores = self._compute_sample_indices(
+            lof_scores, class_sizes
+        )
 
         sample_features = features[sample_indices]
 
+        if return_outlier_scores:
+            sample_features, sample_indices, outlier_scores
         return sample_features, sample_indices
 
     def _compute_sample_indices(self, lof_scores, class_sizes):
-        if self.auto:
-            return self._compute_sample_indices_auto(lof_scores, class_sizes)
 
         return self._compute_sample_indices_manual(lof_scores, class_sizes)
 
-    def _compute_sample_indices_auto_124(
-        self, lof_scores: torch.Tensor, class_sizes: torch.Tensor
-    ):
-
-        lof_scores = lof_scores / lof_scores.max()
-        few_shot_scores = 1 - class_sizes / class_sizes.max()
-        coeffs = 1 - lof_scores * few_shot_scores
-
-        modified_class_sizes = coeffs * class_sizes
-
-        max_idx, K = class_size.detect_max_step_idx(class_sizes)
-
-        percentage = max_idx / len(class_sizes)
-        few_shot_lof_scores = lof_scores * few_shot_scores
-        thresh = torch.quantile(few_shot_lof_scores, percentage)
-        sample_indices = torch.where(few_shot_lof_scores < thresh)[0]
-
-        return sample_indices
-
-    # def _compute_sample_indices_auto_621_42487(self, lof_scores: torch.Tensor, class_sizes:torch.Tensor):
-    def _compute_sample_indices_auto(
-        self, lof_scores: torch.Tensor, class_sizes: torch.Tensor
-    ):
-
-        few_shot_scores = 1 - class_sizes / class_sizes.max()
-
-        aug_lof_scores = lof_scores * few_shot_scores
-        thresh = class_size.detect_max_step(
-            aug_lof_scores, quantize=True, factor=len(aug_lof_scores)
-        )
-        sample_indices = torch.where(aug_lof_scores < thresh)[0]
-
-        return sample_indices
-
-    def _compute_sample_indices_auto_115_421986(
-        self, lof_scores: torch.Tensor, class_sizes: torch.Tensor
-    ):
-
-        aug_class_sizes = class_sizes / lof_scores
-
-        outlier_idxes = class_size.predict_few_shot_class_samples(aug_class_sizes)
-
-        sample_indices = torch.where(outlier_idxes == 0)[0]
-
-        return sample_indices
-
     def _compute_sample_indices_manual(
         self, lof_scores: torch.Tensor, class_sizes: torch.Tensor
     ):
 
         few_shot_scores = 1 - class_sizes / class_sizes.max()
 
-        aug_lof_scores = lof_scores * few_shot_scores
-        thresh = torch.quantile(aug_lof_scores, self.percentage)
-        sample_indices = torch.where(aug_lof_scores < thresh)[0]
+        outlier_scores = lof_scores * few_shot_scores
+        thresh = torch.quantile(outlier_scores, self.percentage)
+        sample_indices = torch.where(outlier_scores < thresh)[0]
 
-        return sample_indices
+        return sample_indices, outlier_scores
 
-
-class SCSLOFSampler(LOFSampler):
-
-    def __init__(
-        self,
-        th,
-        percentage: float = 0.85,  # 1.0
-        lof_k: int = 6,  # 6
-        dimension_to_project_features_to=128,
-        device: torch.device = torch.device("cpu"),
-    ):
-        super().__init__(percentage, lof_k, dimension_to_project_features_to, device)
-
-    def run(
-        self,
-        features: torch.Tensor,
-        feature_map_shape: torch.Tensor = None,
-    ):
-        # if feature_map_shape is provided, patchwise
-        reduced_features = self._reduce_features(features)
-
-        class_sizes = class_size.sample_few_shot(
-            reduced_features,
-            feature_map_shape,
-            th_type="indep",
-            return_class_sizes=True,
-        )
-
-        lof_scores = self._compute_lof_scores(
-            reduced_features,
-            feature_map_shape,
-        )
-
-        sample_indices = self._compute_sample_indices(lof_scores, class_sizes)
-
-        sample_features = features[sample_indices]
-
-        return sample_features, sample_indices
-
-    def _compute_sample_indices(self, lof_scores, class_sizes):
-        return self._compute_sample_indices_auto(lof_scores, class_sizes)
-
-    def _compute_sample_indices_manual(
-        self, lof_scores: torch.Tensor, class_sizes: torch.Tensor
-    ):
-
-        few_shot_scores = 1 - class_sizes / class_sizes.max()
-
-        aug_lof_scores = lof_scores * few_shot_scores
-        thresh = torch.quantile(aug_lof_scores, self.percentage)
-        sample_indices = torch.where(aug_lof_scores < thresh)[0]
-
-        return sample_indices
