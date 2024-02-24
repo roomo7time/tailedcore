@@ -8,6 +8,7 @@ import time
 import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import sklearn.metrics as metrics
 
 from collections import Counter
 from tqdm import tqdm
@@ -25,7 +26,7 @@ from src.backbone import get_backbone
 from src.feature_embedder import FeatureEmbedder
 
 from src.patch_maker import PatchMaker
-from src.sampler import LOFSampler, TailSampler, FewShotLOFSampler, TailedLOFSampler
+from src.sampler import LOFSampler, TailSampler, TailedLOFSampler
 
 
 def analyze_extracted(args):
@@ -68,9 +69,9 @@ def analyze_extracted(args):
     )
     utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
 
-    # analyze_gap(
-    #     gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
-    # )
+    analyze_gap(
+        gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
+    )
     analyze_patch(feas, masks, gaps, save_train_dir_path, save_plot=False)
 
 
@@ -150,10 +151,7 @@ def analyze_patch(feas: torch.Tensor, masks, gaps, save_dir, save_plot=False):
 def _evaluate_anomaly_patch_detection(
     is_anomaly_patch_gt, features, feature_map_shape, gaps, save_dir
 ) -> dict:
-
-    # method_names = ["lof"]
-    # method_names = ["lofscs"]
-    # method_names = ["adalofscs"]
+    
     method_names = ["lof", "lof-scs_symmin"]
     results = []
     for method_name in method_names:
@@ -174,14 +172,15 @@ def _evaluate_anomaly_patch_detection(
 
 def _get_result_anomaly_patch_detection(
     method_name, is_anomaly_patch_gt, features, feature_map_shape, gaps
-):  
+):
 
     if method_name == "lof":
         _, lof_idxes = LOFSampler().run(features, feature_map_shape)
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lof_idxes)
     elif method_name == "lof-scs_symmin":
         _, lofcsp_idxes = TailedLOFSampler(tail_th_type="symmin").run(
-            features, feature_map_shape,
+            features,
+            feature_map_shape,
         )
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
     else:
@@ -267,28 +266,10 @@ def _evaluate_tail_class_detection(
     save_dir: str,
 ):
 
-    # method_names = [
-    #     "lof",
-    #     "lof_scs-indep-mean",
-    #     "scs-symmin-mean",
-    #     "scs-symmin-mode",
-    #     "scs-symmin-nearest",
-    #     "scs-symavg-mean",
-    #     "scs-symavg-mode",
-    #     "scs-symavg-nearest",
-    #     "scs-indep-mean",
-    #     "scs-indep-mode",
-    #     "scs-indep-nearest",
-    # ]
-
-    # method_names = [
-    #     "lof_scs-indep-mean",
-    # ]
-
     method_names = [
-        "scs-symmin-mean",
-        "scs-indep-mean",
-        "scs-symavg-mean",
+        "lof",
+        "scs_symmin",
+        "scs_indep",
     ]
 
     results = []
@@ -315,31 +296,21 @@ def _get_result_tail_class_detection(
     gaps,
 ):
 
-    method_parts = method_name.split("-")
-    method_class = method_parts[0]
-
     if method_name == "lof":
         lof_sampler = LOFSampler()
-        _, head_indices = lof_sampler.run(gaps)
+        _, head_indices, tail_scores = lof_sampler.run(gaps, return_outlier_scores=True)
         is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
         is_tail_pred = 1 - is_head_pred
-        class_sizes_pred = torch.zeros(
-            (
-                len(
-                    gaps,
-                )
-            )
-        )
+        class_sizes_pred = torch.zeros((len(gaps)))
     elif "scs" in method_name:
+        method_parts = method_name.split("_")
         th_type = method_parts[1]
-        vote_type = method_parts[2]
-        tail_sampler = TailSampler(th_type=th_type, vote_type=vote_type)
-        _, tail_indices = tail_sampler.run(gaps)
-        is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
-        class_sizes_pred = class_size.sample_few_shot(
-            gaps, th_type=th_type, vote_type=vote_type, return_class_sizes=True
+        tail_sampler = TailSampler(th_type=th_type, vote_type="mean")
+        _, tail_indices, class_sizes_pred = tail_sampler.run(
+            gaps, return_class_sizes=True
         )
-
+        is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
+        tail_scores = 1 -class_sizes_pred/class_sizes_pred.max()
     else:
         raise NotImplementedError()
 
@@ -367,6 +338,7 @@ def _get_result_tail_class_detection(
         "num_included_anomaly": num_included_anomaly,
         "tail_pred_acc": tail_pred_acc,
         "class_size_pred_error": class_size_pred_error,
+        "auroc": metrics.roc_auc_score(is_tail_gt, tail_scores)
     }
 
 
@@ -452,92 +424,14 @@ def _convert_class_names_to_labels(class_names):
 
     return torch.LongTensor(class_labels), class_label_names
 
-
-def _get_result_csc(
-    gaps,
-    class_sizes_gt,
-    anomaly_labels: torch.Tensor,
-    vote_type: str,
-    th_type: str,
-):
-
-    _, few_shot_indices = class_size.sample_few_shot(
-        gaps, th_type=th_type, vote_type=vote_type
-    )
-    _result = _get_few_shot_result(
-        len(gaps), few_shot_indices, class_sizes_gt, anomaly_labels
-    )
-
-    _result["method"] = "csc"
-    _result["th_type"] = th_type
-    _result["vote_type"] = vote_type
-
-    return _result
-
-
 def convert_indices_to_bool(n: int, indices: torch.Tensor) -> torch.Tensor:
     bool_array = torch.zeros((n), dtype=torch.long)
     bool_array[indices] = 1
     return bool_array
 
 
-def _get_result_lof(
-    gaps,
-    class_sizes_gt,
-    anomaly_labels: torch.Tensor,
-    augment_class_sizes: bool = False,
-):
-    lof_sampler = LOFSampler()
-    _, many_shot_indices = lof_sampler.run(
-        gaps, augment_class_sizes=augment_class_sizes
-    )
-
-    def complementary_indices(indices: torch.Tensor, n: int):
-        # Create a tensor of all indices
-        all_indices = torch.arange(n)
-
-        # Find the complementary indices
-        mask = ~torch.isin(all_indices, indices)
-
-        # Apply the mask to get complementary indices
-        complement = all_indices[mask]
-
-        return complement
-
-    few_shot_indices = complementary_indices(many_shot_indices, len(gaps))
-
-    _result = _get_few_shot_result(
-        len(gaps), few_shot_indices, class_sizes_gt, anomaly_labels
-    )
-
-    _result["method"] = "lof"
-
-    if augment_class_sizes:
-        _result["method"] = "lof-csc"
-
-    return _result
 
 
-def _get_few_shot_result(
-    n_samples,
-    few_shot_indices: torch.Tensor,
-    class_sizes_gt: torch.Tensor,
-    anomaly_labels: torch.Tensor,
-):
-    is_few_shot_pred = torch.zeros((n_samples))
-    is_few_shot_pred[few_shot_indices] = 1
-    is_few_shot_target = (class_sizes_gt <= 20).to(torch.long)
-
-    is_missing_few_show = (is_few_shot_pred - is_few_shot_target) < 0
-    is_included_anomaly = (is_few_shot_pred + anomaly_labels) > 1
-
-    num_missing_few_shot_samples = is_missing_few_show.sum().item()
-    num_included_anomaly_samples = is_included_anomaly.sum().item()
-
-    return {
-        "num_included_anomaly_samples": num_included_anomaly_samples,
-        "num_missing_few_shot_samples": num_missing_few_shot_samples,
-    }
 
 
 def plot_scatter(scores, labels, label_names, extra_labels, th, filename):

@@ -15,7 +15,7 @@ from .sampler import (
     IncrementalGreedyCoresetSampler,
     GreedyCoresetSampler,
     TailSampler,
-    FewShotLOFSampler,
+    TailedLOFSampler,
     LOFSampler
 )
 from .common import FaissNN, NearestNeighbourScorer, RescaleSegmentor

@@ -458,7 +458,7 @@ class GreedyCoresetSampler(BaseSampler):
 class TailSampler(BaseSampler):
     def __init__(
         self,
-        th_type: "str" = "indep",
+        th_type: "str" = "symmin",
         vote_type: "str" = "mean",
     ):
         self.th_type = th_type
