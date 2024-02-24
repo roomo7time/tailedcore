@@ -98,7 +98,7 @@ def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_si
         num_samples_per_class.append(_num_samples_in_current_class)
         class_sizes_sorted = class_sizes_sorted[_num_samples_in_current_class:]
 
-    return torch.FloatTensor(num_samples_per_class)
+    return torch.FloatTensor(num_samples_per_class).sort(descending=True)[0]
 
 
 # # FIXME: this function is not robust. needs to be revised
@@ -115,7 +115,6 @@ def predict_num_samples_per_class(class_sizes: torch.FloatTensor, round_class_si
 def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
 
     num_samples_per_class = predict_num_samples_per_class(class_sizes)
-    num_samples_per_class = num_samples_per_class.sort(descending=True)[0]
 
     _num_samples_per_class = torch.cat([torch.arange(len(num_samples_per_class))[:, None], num_samples_per_class[:, None]], dim=1)
     ods = compute_orthogonal_distances(_num_samples_per_class, _num_samples_per_class[[0, -1], :])

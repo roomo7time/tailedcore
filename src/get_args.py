@@ -19,14 +19,14 @@ def parse_args():
         "--data_sub_path",
         type=str,
         # mvtec
-        # default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed0",
+        default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed0",
         # default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed7",
         # default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed0",
         # default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed7",
         # default="anomaly_detection/symlink_mvtec_pareto_nr10_seed0",
         # default="anomaly_detection/symlink_mvtec_pareto_nr10_seed2",
         # visa
-        default="anomaly_detection/symlink_visa_step_nr10_k4_seed0",
+        # default="anomaly_detection/symlink_visa_step_nr10_k4_seed0",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
     parser.add_argument("--config_name", type=str, default="tailedpatch_mvtec_01")
