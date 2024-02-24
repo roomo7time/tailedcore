@@ -125,8 +125,8 @@ def evaluate(args):
             score_masks
         )  # this part incldues ensembling of different backbone outputs
 
-        if np.array(masks_gt).ndim == 4:
-            masks_gt = np.array(masks_gt).astype(np.uint8)[:, 0, :, :]
+        
+        masks_gt = np.array(masks_gt).astype(np.uint8)[:, 0, :, :]
         score_masks = np.array(score_masks)
         # FIXME: min_size is currently hard-coded
         result_list.append(

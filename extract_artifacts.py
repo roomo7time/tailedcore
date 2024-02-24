@@ -100,6 +100,7 @@ def extract_features(args):
             _class_names = _get_class_names_mvtec(_image_paths)
 
             _masks = data["mask"]
+
             _masks, _labels = revise_masks_mvtec(
                 _image_paths, _masks, _labels, transform_mask
             )
@@ -109,6 +110,7 @@ def extract_features(args):
             )
 
             _feas, _gaps = feature_embedder(_images, return_embeddings=True)
+            _masks = _masks.floor()
 
             with torch.no_grad():
                 _reduced_feas = mapper(_feas.to(device)).cpu()
@@ -195,6 +197,7 @@ def revise_masks_mvtec(image_paths, masks, labels, transform_mask):
     for i, image_path in enumerate(image_paths):
         if _is_anomaly_path_mvtec(image_path):
 
+            # FIXME: refactor
             image_file_name_without_ext, ext = os.path.splitext(image_path)
             image_file_name_without_ext = image_file_name_without_ext[-3:]
             mask_file_name = f"{image_file_name_without_ext}_mask{ext}"
@@ -209,8 +212,14 @@ def revise_masks_mvtec(image_paths, masks, labels, transform_mask):
                 },
             )
 
+            # TODO: debug
+            mask_dir = os.path.dirname(mask_path)
+            mask_path_pattern = f"{mask_dir}/*{image_file_name_without_ext}*"
+            mask_path = glob.glob(mask_path_pattern)[0]
+
             mask = PIL.Image.open(mask_path)
             mask = transform_mask(mask)
+            
             masks[i] = mask
             labels[i] = 1
 
@@ -229,11 +238,12 @@ def get_class_sizes_mvtec(image_paths):
 
 def _get_class_size_mvtec(image_path):
 
-    pattern = os.path.join(os.path.dirname(image_path), "*.png")
+    # pattern = os.path.join(os.path.dirname(image_path), "*.png")
+    pattern = os.path.join(os.path.dirname(image_path), "*")
 
-    png_files = glob.glob(pattern)
+    files = glob.glob(pattern)
 
-    return len(png_files)
+    return len(files)
 
 
 def _resize_mask(masks, target_size, binarize=False):

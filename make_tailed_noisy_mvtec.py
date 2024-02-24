@@ -561,7 +561,7 @@ def main(seed):
     # target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_mvtec_{tail_type}_nr{int(noise_ratio*100):02d}"
 
     # visa_
-    source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa_"
+    source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
     target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_visa_{tail_type}_nr{int(noise_ratio*100):02d}"
 
     if tail_type == "step" and tail_k is not None:
@@ -594,6 +594,6 @@ def main(seed):
 
 
 if __name__ == "__main__":
-    for seed in range(10):
-        main(seed)
+    seed = 0
+    main(seed)
     
