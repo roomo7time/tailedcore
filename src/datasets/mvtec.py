@@ -104,7 +104,6 @@ class MVTecDataset(torch.utils.data.Dataset):
         if self.split == DatasetSplit.TEST and mask_path is not None:
             mask = PIL.Image.open(mask_path)
             mask = self.transform_mask(mask)
-            # mask = (mask > 0).to(mask.dtype)        # FIXME: debug
         else:
             mask = torch.zeros([1, *image.size()[1:]])
 
