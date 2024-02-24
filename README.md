@@ -1,29 +1,11 @@
 # README #
 
-This README would normally document whatever steps are necessary to get your application up and running.
 
-### What is this repository for? ###
+## Data download
 
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
+### VisA
 
-### How do I get set up? ###
+[VisA download link](https://www.dropbox.com/scl/fi/rqdsrc37ux6wpphg2jmiu/visa.zip?rlkey=b9yzmn8d83vufqo2qdz3hgaby&dl=0)
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+Then, run `make_tailed_noisy_mvtec.py`
 
-### Contribution guidelines ###
-
-* Writing tests
-* Code review
-* Other guidelines
-
-### Who do I talk to? ###
-
-* Repo owner or admin
-* Other community or team contact
