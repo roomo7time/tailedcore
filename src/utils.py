@@ -504,6 +504,7 @@ def save_dicts_to_csv(dict_list: list, filename: str):
     df = pd.DataFrame(dict_list)
 
     # Save the DataFrame to a CSV file
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     df.to_csv(filename, index=False)
 
     return df

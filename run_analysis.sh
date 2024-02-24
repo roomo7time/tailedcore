@@ -3,6 +3,8 @@
 # Create logs directory if it doesn't exist
 mkdir -p ./logs
 
+python evaluate.py
+
 for seed in {0..9}; do
     DATA_NAMES=(
         "symlink_mvtec_pareto_nr10_seed${seed}" 
@@ -24,7 +26,7 @@ for seed in {0..9}; do
         for config_name in "${CONFIG_NAMES[@]}"; do
             # python evaluate.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
             python extract_artifacts.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
-            python analyze_extracted.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}" > "./logs/${data_name}_${config_name}_analyze_extracted.log" 2>&1
+            python analyze_extracted.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}" # > "./logs/${data_name}_${config_name}_analyze_extracted.log" 2>&1
         done
     done
 done

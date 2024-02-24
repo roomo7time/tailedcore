@@ -46,10 +46,10 @@ def analyze_extracted(args):
     )
 
     _train_dataloader = dataloaders[0]["train"]
-    save_train_dir_path = os.path.join(
+    save_extracted_dir = os.path.join(
         "./artifacts", args.data_name, args.config_name, _train_dataloader.name
     )
-    extracted_path = os.path.join(save_train_dir_path, "extracted.pt")
+    extracted_path = os.path.join(save_extracted_dir, "extracted.pt")
 
     assert os.path.exists(extracted_path)
 
@@ -69,10 +69,12 @@ def analyze_extracted(args):
     )
     utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
 
+    save_log_dir = os.path.join("./logs", f"{args.data_name}_{args.config_name}")
+
     analyze_gap(
-        gaps, masks, class_names, class_sizes, save_train_dir_path, save_plot=False
+        gaps, masks, class_names, class_sizes, save_log_dir, save_plot=False
     )
-    analyze_patch(feas, masks, gaps, save_train_dir_path, save_plot=False)
+    analyze_patch(feas, masks, gaps, save_log_dir, save_plot=False)
 
 
 def analyze_patch(feas: torch.Tensor, masks, gaps, save_dir, save_plot=False):

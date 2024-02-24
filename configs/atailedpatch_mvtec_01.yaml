@@ -11,7 +11,10 @@ model:
   layers_to_extract: ["layer2", "layer3"]
   embedding_to_extract_from: "avgpool"
 
-  coreset_model_name: "augtailedpatch"
+  coreset_model_name: "atailedpatch"
+  tail_th_type: "symmin"
+  data_augment_tail: true
+  tail_lof: true
 
   greedy_ratio: 0.1
   greedy_proj_dim: 128

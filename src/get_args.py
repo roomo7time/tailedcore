@@ -29,7 +29,7 @@ def parse_args():
         # default="anomaly_detection/symlink_visa_step_nr10_k4_seed0",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
-    parser.add_argument("--config_name", type=str, default="tailedpatch_mvtec_01")
+    parser.add_argument("--config_name", type=str, default="atailedpatch_mvtec_02")
 
     # # toy setting
     # parser.add_argument(
