@@ -29,7 +29,8 @@ from src.patch_maker import PatchMaker
 from src.sampler import LOFSampler, TailSampler, TailedLOFSampler
 
 
-def analyze_extracted(
+
+def analyze_patch(
     extracted_path: str,
     data_name: str,
     config_name: str,
@@ -50,25 +51,19 @@ def analyze_extracted(
 
     num_samples_per_class = dict(Counter(class_names))
 
-    save_log_dir = os.path.join("./logs", f"{data_name}_{config_name}")
+    save_log_dir = os.path.join("./logs", f"{data_name}_{config_name}_seed{seed}")
 
     save_data_info_path = os.path.join(save_log_dir, "num_samples_per_class.csv")
     utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
 
     num_classes = len(set(class_names))
 
-    get_patch_result_df(
-        gaps,
+    df = get_patch_result_df(
+        feas,
         masks,
-        class_names,
-        class_sizes,
-        num_classes,
         save_log_dir,
-        save_plot=False,
     )
-    analyze_patch(feas, masks, save_log_dir, save_plot=False)
-
-
+    return df
 
 
 def get_patch_result_df(feas: torch.Tensor, masks, save_dir):
@@ -152,6 +147,43 @@ def _get_result_anomaly_patch_detection(
 
     return _result
 
+def analyze_gap(
+    extracted_path: str,
+    data_name: str,
+    config_name: str,
+    seed: int
+):
+    utils.set_seed(seed)
+
+    assert os.path.exists(extracted_path)
+
+    extracted = torch.load(extracted_path)
+
+    feas = extracted["feas"]
+    masks = extracted["masks"]
+
+    gaps = extracted["gaps"]
+    class_names = extracted["class_names"]
+    class_sizes = extracted["class_sizes"]
+
+    num_samples_per_class = dict(Counter(class_names))
+
+    save_log_dir = os.path.join("./logs", f"{data_name}_{config_name}_seed{seed}")
+
+    save_data_info_path = os.path.join(save_log_dir, "num_samples_per_class.csv")
+    utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
+
+    num_classes = len(set(class_names))
+
+    df = get_gap_result_df(
+        gaps,
+        masks,
+        class_names,
+        class_sizes,
+        num_classes,
+        save_log_dir,
+    )
+    return df
 
 def get_gap_result_df(gaps, masks, class_names, class_sizes, num_classes, save_dir):
     if gaps.ndim == 4:
@@ -647,7 +679,37 @@ def plot_gap_analysis(
             plot_gap_self_sim(i)
 
 import pandas as pd
-def average_dfs(dfs):
+from typing import List
+
+# def average_dfs(dfs):
+#     # Concatenate dataframes
+#     combined_df = pd.concat(dfs)
+
+#     # Identify numeric columns
+#     numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
+
+#     # Compute the mean only for numeric columns
+#     avg_df = combined_df[numeric_cols].groupby(combined_df.index).mean()
+
+#     # For non-numeric columns, use the value from the first dataframe in the list
+#     non_numeric_cols = combined_df.select_dtypes(exclude=[np.number]).columns
+#     for col in non_numeric_cols:
+#         avg_df[col] = dfs[0][col]
+
+#     return avg_df
+
+def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
+    """
+    Averages numeric columns in a list of dataframes, preserves non-numeric columns, 
+    and places non-numeric columns on the left-most side of the resulting DataFrame.
+
+    Parameters:
+    dfs (List[pd.DataFrame]): List of Pandas DataFrames with the same columns and index
+
+    Returns:
+    pd.DataFrame: A new DataFrame with non-numeric columns on the left and 
+                  averaged numeric columns on the right.
+    """
     # Concatenate dataframes
     combined_df = pd.concat(dfs)
 
@@ -655,12 +717,13 @@ def average_dfs(dfs):
     numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
 
     # Compute the mean only for numeric columns
-    avg_df = combined_df[numeric_cols].groupby(combined_df.index).mean()
+    avg_numeric_df = combined_df[numeric_cols].groupby(combined_df.index).mean()
 
-    # For non-numeric columns, use the value from the first dataframe in the list
-    non_numeric_cols = combined_df.select_dtypes(exclude=[np.number]).columns
-    for col in non_numeric_cols:
-        avg_df[col] = dfs[0][col]
+    # Extract non-numeric columns from the first dataframe in the list
+    non_numeric_df = dfs[0][combined_df.select_dtypes(exclude=[np.number]).columns]
+
+    # Concatenate non-numeric and numeric dataframes
+    avg_df = pd.concat([non_numeric_df, avg_numeric_df], axis=1)
 
     return avg_df
 
@@ -691,7 +754,7 @@ def average_dfs(dfs):
 #     # Display the result
 #     print(avg_df)
 
-def analyze_mvtec():
+def analyze_mvtec(type='gap'):
     seeds = [0, 2, 7]
     data_names = ['mvtec_pareto_nr10', 'mvtec_step_nr10_tk1_tr60', 'mvtec_step_nr10_tk4_tr60']
     config_names = ['tailedpatch_mvtec_01', 'tailedpatch_mvtec_05', 'tailedpatch_mvtec_06', 'tailedpatch_mvtec_07']
@@ -704,23 +767,34 @@ def analyze_mvtec():
                 extracted_path = f'./artifacts/anomaly_detection_{data_name}_seed{seed}_mvtec-multiclass/{config_name}/all/extracted.pt' 
 
                 try:
-                    _df = analyze_extracted(
-                        extracted_path=extracted_path,
-                        data_name=data_name,
-                        config_name=config_name,
-                        seed=seed
-                    )
+                    if type == 'gap':
+                        _df = analyze_gap(
+                            extracted_path=extracted_path,
+                            data_name=data_name,
+                            config_name=config_name,
+                            seed=seed
+                        )
+                    elif type == 'patch':
+                        _df = analyze_patch(
+                            extracted_path=extracted_path,
+                            data_name=data_name,
+                            config_name=config_name,
+                            seed=seed
+                        )
+                    else:
+                        raise NotImplementedError()
                     dfs.append(_df)
                 except:
                     pass
     
     avg_df = average_dfs(dfs)
     os.makedirs('./logs')
-    avg_df.to_csv('./logs/mvtec_analysis.csv', index=False)
+    avg_df.to_csv(f'./logs/analysis_mvtec_{type}.csv', index=False)
 
 # mvtec:
 if __name__ == "__main__":
-    analyze_mvtec()
+    analyze_mvtec(type='gap')
+    analyze_mvtec(type='patch')
     
     
 
