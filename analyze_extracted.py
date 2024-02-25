@@ -445,8 +445,7 @@ def _get_result_tail_class_detection(
     ratio_missing_tail = is_missing_tail.sum().item() / is_tail_gt.sum().item()
     ratio_included_anomaly = is_included_anomaly.sum().item() / is_anomaly_gt.sum().item()
     ratio_included_head = is_included_head.sum().item() / max(is_tail_pred.sum().item(), 1)
-
-
+    
     class_size_pred_error = (
         (
             abs(class_sizes_pred - class_sizes_gt)
