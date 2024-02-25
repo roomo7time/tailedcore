@@ -7,6 +7,7 @@ CONFIG_NAMES=(
 
 # Define specific data names with their corresponding seeds
 DATA_NAMES=(
+    "mvtec_step_nr10_tk4_tr60_seed7"
     "mvtec_step_nr10_tk1_tr60_seed0"
     "mvtec_step_nr10_tk1_tr60_seed7"
 )
