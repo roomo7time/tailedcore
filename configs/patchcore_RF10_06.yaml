@@ -1,0 +1,23 @@
+
+seed: 0
+
+data:
+  resize: null
+  imagesize: 224
+  inputsize: 224
+  overlap_ratio: 0.5
+  roi: [1600, 36, 6976, 4964]
+
+model:
+  backbone_names: ["wideresnet50"]
+  layers_to_extract: ["layer2", "layer3"]
+
+  coreset_model_name: "patchcore"
+
+  greedy_ratio: 0.1
+  greedy_proj_dim: 128
+
+  faiss_k_neighbor: 1
+
+  train_mode: "partition"
+

@@ -143,8 +143,8 @@ def evaluate(args):
 
         print(result_list[-1])
 
-    save_config_dir_path = os.path.join("./artifacts", args.data_name, args.config_name)
-    result_df = result.summarize_result(result_list, save_config_dir_path)
+    save_log_path = os.path.join("./logs", f'performance_{args.data_name}_{args.config_name}.csv')
+    result_df = utils.save_dicts_to_csv(result_list, save_log_path)
 
     performance = result_df["image_auroc"].mean()
     return performance
