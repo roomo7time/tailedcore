@@ -635,7 +635,7 @@ class TailedLOFSampler(LOFSampler):
         sample_features = features[sample_indices]
 
         if return_outlier_scores:
-            sample_features, sample_indices, outlier_scores
+            return sample_features, sample_indices, outlier_scores
         return sample_features, sample_indices
 
     def _compute_sample_indices(self, lof_scores, class_sizes):

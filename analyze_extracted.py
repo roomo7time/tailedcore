@@ -64,18 +64,27 @@ def analyze_extracted(args):
     class_sizes = extracted["class_sizes"]
 
     num_samples_per_class = dict(Counter(class_names))
-    save_data_info_path = os.path.join(
-        "./artifacts", args.data_name, "num_samples_per_class.csv"
-    )
-    utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
 
     save_log_dir = os.path.join("./logs", f"{args.data_name}_{args.config_name}")
 
-    analyze_gap(gaps, masks, class_names, class_sizes, save_log_dir, save_plot=False)
-    # analyze_patch(feas, masks, gaps, save_log_dir, save_plot=False)
+    save_data_info_path = os.path.join(save_log_dir, "num_samples_per_class.csv")
+    utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
+
+    num_classes = len(set(class_names))
+
+    analyze_gap(
+        gaps,
+        masks,
+        class_names,
+        class_sizes,
+        num_classes,
+        save_log_dir,
+        save_plot=False,
+    )
+    analyze_patch(feas, masks, save_log_dir, save_plot=False)
 
 
-def analyze_patch(feas: torch.Tensor, masks, gaps, save_dir, save_plot=False):
+def analyze_patch(feas: torch.Tensor, masks, save_dir, save_plot=False):
 
     downsized_masks = _downsize_masks(masks, mode="bilinear")
 
@@ -95,7 +104,7 @@ def analyze_patch(feas: torch.Tensor, masks, gaps, save_dir, save_plot=False):
     )
 
     _evaluate_anomaly_patch_detection(
-        is_anomaly_patch_gt, features, feature_map_shape, gaps, save_dir
+        is_anomaly_patch_gt, features, feature_map_shape, save_dir
     )
 
     if save_plot:
@@ -149,7 +158,7 @@ def analyze_patch(feas: torch.Tensor, masks, gaps, save_dir, save_plot=False):
 
 
 def _evaluate_anomaly_patch_detection(
-    is_anomaly_patch_gt, features, feature_map_shape, gaps, save_dir
+    is_anomaly_patch_gt, features, feature_map_shape, save_dir
 ) -> dict:
 
     method_names = ["lof", "lof-scs_symmin"]
@@ -160,7 +169,6 @@ def _evaluate_anomaly_patch_detection(
             is_anomaly_patch_gt,
             features,
             feature_map_shape,
-            gaps,
         )
         results.append(_result)
 
@@ -171,16 +179,20 @@ def _evaluate_anomaly_patch_detection(
 
 
 def _get_result_anomaly_patch_detection(
-    method_name, is_anomaly_patch_gt, features, feature_map_shape, gaps
+    method_name,
+    is_anomaly_patch_gt,
+    features,
+    feature_map_shape,
 ):
 
     if method_name == "lof":
-        _, lof_idxes = LOFSampler().run(features, feature_map_shape)
+        _, lof_idxes, outlier_scores = LOFSampler().run(
+            features, feature_map_shape, return_outlier_scores=True
+        )
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lof_idxes)
     elif method_name == "lof-scs_symmin":
-        _, lofcsp_idxes = TailedLOFSampler(tail_th_type="symmin").run(
-            features,
-            feature_map_shape,
+        _, lofcsp_idxes, outlier_scores = TailedLOFSampler(tail_th_type="symmin").run(
+            features, feature_map_shape, return_outlier_scores=True
         )
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
     else:
@@ -195,12 +207,17 @@ def _get_result_anomaly_patch_detection(
         "method": method_name,
         "num_missing_anomaly_patch": num_missing_anomaly_patch,
         "num_missing_normal_patch": num_missing_normal_patch,
+        "auroc": round(
+            metrics.roc_auc_score(is_anomaly_patch_gt, outlier_scores) * 100, 2
+        ),
     }
 
     return _result
 
 
-def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=False):
+def analyze_gap(
+    gaps, masks, class_names, class_sizes, num_classes, save_dir, save_plot=False
+):
 
     if gaps.ndim == 4:
         gaps = gaps[:, :, 0, 0]
@@ -214,6 +231,7 @@ def analyze_gap(gaps, masks, class_names, class_sizes, save_dir, save_plot=False
         gaps=gaps,
         class_sizes_gt=class_sizes,
         is_anomaly_gt=is_anomaly_gt,
+        num_classes=num_classes,
         save_dir=save_dir,
     )
 
@@ -263,6 +281,7 @@ def _evaluate_tail_class_detection(
     gaps: torch.Tensor,
     class_sizes_gt: torch.Tensor,
     is_anomaly_gt: torch.Tensor,
+    num_classes: int,
     save_dir: str,
 ):
 
@@ -275,11 +294,12 @@ def _evaluate_tail_class_detection(
         "dbscan",
         "dbscan_tunned",
         "dbscan_tunned_elbow",
+        "dbscan_adaptive",
         "dbscan_adaptive_elbow",
         "kmeans",
         "gmm",
         "kde",
-        "affprop"
+        "affprop",
     ]
 
     results = []
@@ -288,6 +308,7 @@ def _evaluate_tail_class_detection(
             method_name=method_name,
             class_sizes_gt=class_sizes_gt,
             is_anomaly_gt=is_anomaly_gt,
+            num_classes=num_classes,
             gaps=gaps,
         )
         results.append(_result)
@@ -303,6 +324,7 @@ def _get_result_tail_class_detection(
     method_name,
     class_sizes_gt,
     is_anomaly_gt,
+    num_classes,
     gaps: torch.Tensor,
 ):
 
@@ -351,7 +373,7 @@ def _get_result_tail_class_detection(
         class_sizes_pred = torch.FloatTensor(
             np.array([cluster_counts[label] for label in labels])
         )
-    elif method_name == "dbscan_tunned":    # cheating
+    elif method_name == "dbscan_tunned":  # cheating
         from sklearn.cluster import DBSCAN
 
         X = F.normalize(gaps, dim=-1).numpy()
@@ -363,7 +385,7 @@ def _get_result_tail_class_detection(
         class_sizes_pred = torch.FloatTensor(
             np.array([cluster_counts[label] for label in labels])
         )
-    elif method_name == "dbscan_tunned_elbow":    # cheating
+    elif method_name == "dbscan_tunned_elbow":  # cheating
         from sklearn.cluster import DBSCAN
 
         X = F.normalize(gaps, dim=-1).numpy()
@@ -375,7 +397,20 @@ def _get_result_tail_class_detection(
         )
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
         is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
-    
+    elif method_name == "dbscan_adaptive":
+        from sklearn.cluster import DBSCAN
+
+        self_sim = class_size.compute_self_sim(gaps, normalize=True)
+        min_sim = max(class_size.compute_self_sim_min(self_sim).item(), 0)
+        X = F.normalize(gaps, dim=-1).numpy()
+        dbscan = DBSCAN(min_samples=1, eps=np.cos(np.arccos(min_sim) / 2)).fit(X)
+        labels = dbscan.labels_
+        is_tail_pred = torch.from_numpy(labels == -1).long()
+        tail_scores = is_tail_pred.float()
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
     elif method_name == "dbscan_adaptive_elbow":
         from sklearn.cluster import DBSCAN
 
@@ -392,12 +427,16 @@ def _get_result_tail_class_detection(
         is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
     elif method_name == "kmeans":
         from sklearn.cluster import KMeans
-        
+
         X = gaps.numpy()
-        kmeans = KMeans(n_clusters=3, random_state=0).fit(X)  # Adjust 'n_clusters' as needed
+        kmeans = KMeans(n_clusters=3, random_state=0).fit(
+            X
+        )  # Adjust 'n_clusters' as needed
         labels = kmeans.predict(X)
         cluster_counts = Counter(labels)
-        class_sizes_pred = torch.from_numpy(np.array([cluster_counts[label] for label in labels])).float()
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
         is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
     elif method_name == "gmm":
@@ -407,28 +446,32 @@ def _get_result_tail_class_detection(
         gmm = GaussianMixture().fit(X)
         labels = gmm.predict(X)
         cluster_counts = Counter(labels)
-        class_sizes_pred = torch.from_numpy(np.array([cluster_counts[label] for label in labels])).float()
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
         is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
     elif method_name == "kde":
         from sklearn.neighbors import KernelDensity
 
-        X = gaps.numpy()  
-        kde = KernelDensity(kernel='gaussian', bandwidth=0.5).fit(X)
+        X = gaps.numpy()
+        kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(X)
         log_densities = kde.score_samples(X)
         log_densities_torch = torch.from_numpy(log_densities).float()
         tail_scores = -log_densities_torch
         class_sizes_pred = torch.zeros_like(tail_scores)
         is_tail_pred = torch.zeros_like(class_sizes_pred).long()
-        
+
     elif method_name == "affprop":  # affinity propagation
         from sklearn.cluster import AffinityPropagation
-        
+
         X = gaps.numpy()
         affinity_propagation = AffinityPropagation(random_state=0).fit(X)
         labels = affinity_propagation.predict(X)
         cluster_counts = Counter(labels)
-        class_sizes_pred = torch.from_numpy(np.array([cluster_counts[label] for label in labels])).float()
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
         is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
     else:
@@ -440,31 +483,27 @@ def _get_result_tail_class_detection(
     is_included_anomaly = (is_tail_pred + is_anomaly_gt) > 1
     is_included_head = (is_tail_pred - is_tail_gt) > 0
 
-    # num_missing_tail = is_missing_tail.sum().item()
-    # num_included_anomaly = is_included_anomaly.sum().item()
     ratio_missing_tail = is_missing_tail.sum().item() / is_tail_gt.sum().item()
-    ratio_included_anomaly = is_included_anomaly.sum().item() / is_anomaly_gt.sum().item()
-    ratio_included_head = is_included_head.sum().item() / max(is_tail_pred.sum().item(), 1)
-    
-    class_size_pred_error = (
-        (
-            abs(class_sizes_pred - class_sizes_gt)
-            * (1 / class_sizes_gt)
-            * (1 / class_sizes_gt)
-        )
-        .sum()
-        .item()
+    ratio_included_anomaly = (
+        is_included_anomaly.sum().item() / is_anomaly_gt.sum().item()
+    )
+    ratio_included_head = is_included_head.sum().item() / max(
+        is_tail_pred.sum().item(), 1
+    )
+
+    class_size_pred_error = round(
+        (abs(class_sizes_pred - class_sizes_gt) * (1 / class_sizes_gt)).mean().item(), 2
     )
     tail_pred_acc = 1 - abs(is_tail_gt - is_tail_pred).to(torch.float).mean().item()
 
     return {
         "method": method_name,
-        "ratio_missing_tail": ratio_missing_tail,
-        "ratio_included_anomaly": ratio_included_anomaly,
-        "ratio_included_head": ratio_included_head,
-        "auroc": metrics.roc_auc_score(is_tail_gt, tail_scores),
+        "ratio_missing_tail": ratio_missing_tail * 100,
+        "ratio_included_anomaly": ratio_included_anomaly * 100,
+        "ratio_included_head": ratio_included_head * 100,
+        "auroc": metrics.roc_auc_score(is_tail_gt, tail_scores) * 100,
         "class_size_pred_error": class_size_pred_error,
-        "tail_pred_acc": tail_pred_acc,
+        "tail_pred_acc": tail_pred_acc * 100,
     }
 
 

@@ -107,8 +107,8 @@ def save_result(
         print("Failed at computing image auroc...")
 
     result = {"test_data_name": os.path.basename(save_dir_path)}
-    result["image_auroc"] = image_auroc
-    result["pixel_auroc"] = pixel_auroc
+    result["image_auroc"] = image_auroc * 100
+    result["pixel_auroc"] = pixel_auroc * 100
 
     return result
 
