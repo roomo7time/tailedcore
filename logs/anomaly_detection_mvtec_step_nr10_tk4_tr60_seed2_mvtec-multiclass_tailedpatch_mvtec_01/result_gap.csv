@@ -1,0 +1,2 @@
+method,num_missing_tail,num_included_anomaly,tail_pred_acc,class_size_pred_error,auroc
+adaptive_dbscan_tunned_elbow,4,0,0.9977653631940484,63.540069580078125,0.9773850247054352

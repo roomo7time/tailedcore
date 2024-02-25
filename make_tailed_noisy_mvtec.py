@@ -14,12 +14,12 @@ import argparse
 
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
-    parser.add_argument("--tail_type", type=str, choices=["step", "pareto"], default="pareto", help="")
+    parser.add_argument("--tail_type", type=str, choices=["step", "pareto"], default="step", help="")
     parser.add_argument("--step_tail_k", type=int, default=1, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
     parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
-    parser.add_argument("--source_dir", type=str, default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec", 
+    parser.add_argument("--source_dir", type=str, default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa", 
                         # choices=[
                         #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
                         #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"

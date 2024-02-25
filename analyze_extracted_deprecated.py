@@ -29,13 +29,27 @@ from src.patch_maker import PatchMaker
 from src.sampler import LOFSampler, TailSampler, TailedLOFSampler
 
 
-def analyze_extracted(
-    extracted_path: str,
-    data_name: str,
-    config_name: str,
-    seed: int
-):
-    utils.set_seed(seed)
+def analyze_extracted(args):
+    utils.set_seed(args.config.seed)
+
+    config = args.config
+
+    device = utils.set_torch_device(args.gpu)
+
+    input_shape = (3, config.data.inputsize, config.data.inputsize)
+
+    dataloaders = get_dataloaders(
+        config.data,
+        data_format=args.data_format,
+        data_path=args.data_path,
+        batch_size=args.batch_size,
+    )
+
+    _train_dataloader = dataloaders[0]["train"]
+    save_extracted_dir = os.path.join(
+        "./artifacts", args.data_name, args.config_name, _train_dataloader.name
+    )
+    extracted_path = os.path.join(save_extracted_dir, "extracted.pt")
 
     assert os.path.exists(extracted_path)
 
@@ -45,19 +59,20 @@ def analyze_extracted(
     masks = extracted["masks"]
 
     gaps = extracted["gaps"]
+    labels = extracted["labels"]
     class_names = extracted["class_names"]
     class_sizes = extracted["class_sizes"]
 
     num_samples_per_class = dict(Counter(class_names))
 
-    save_log_dir = os.path.join("./logs", f"{data_name}_{config_name}")
+    save_log_dir = os.path.join("./logs", f"{args.data_name}_{args.config_name}")
 
     save_data_info_path = os.path.join(save_log_dir, "num_samples_per_class.csv")
     utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
 
     num_classes = len(set(class_names))
 
-    get_patch_result_df(
+    analyze_gap(
         gaps,
         masks,
         class_names,
@@ -69,9 +84,8 @@ def analyze_extracted(
     analyze_patch(feas, masks, save_log_dir, save_plot=False)
 
 
+def analyze_patch(feas: torch.Tensor, masks, save_dir, save_plot=False):
 
-
-def get_patch_result_df(feas: torch.Tensor, masks, save_dir):
     downsized_masks = _downsize_masks(masks, mode="bilinear")
 
     if downsized_masks.ndim == 4:
@@ -79,6 +93,7 @@ def get_patch_result_df(feas: torch.Tensor, masks, save_dir):
 
     n, fea_dim, h, w = feas.shape
 
+    label_names = ["normal", "abnormal"]
     anomaly_patch_scores_gt = downsized_masks.reshape((-1))
     is_anomaly_patch_gt = torch.round(anomaly_patch_scores_gt).to(torch.long)
     feature_map_shape = [28, 28]
@@ -88,9 +103,58 @@ def get_patch_result_df(feas: torch.Tensor, masks, save_dir):
         .reshape((-1, fea_dim))
     )
 
-    return _evaluate_anomaly_patch_detection(
+    _evaluate_anomaly_patch_detection(
         is_anomaly_patch_gt, features, feature_map_shape, save_dir
     )
+
+    if save_plot:
+        save_dir_normal = os.path.join(save_dir, "plot", "self_sim", "normal")
+        save_dir_abnormal = os.path.join(save_dir, "plot", "self_sim", "abnormal")
+
+        os.makedirs(save_dir_normal, exist_ok=True)
+        os.makedirs(save_dir_abnormal, exist_ok=True)
+
+        th = np.cos(np.pi / 8)  # FIXME: tmp
+        pixelwise_feas = feas.reshape(n, fea_dim, -1).permute(2, 0, 1)
+        pixelwise_gt_scores = anomaly_patch_scores_gt.reshape(n, h * w).numpy()
+        pixelwise_labels = is_anomaly_patch_gt.reshape(n, h * w).numpy()
+        pixelwise_self_sim = class_size.compute_self_sim(pixelwise_feas).numpy()
+
+        def plot_pixelwise_self_sim(p, i):
+            print(f"Plotting (p,i) = ({p}, {i})")
+
+            _self_sim = pixelwise_self_sim[p]
+            _scores = _self_sim[i]
+            _gt_scores = pixelwise_gt_scores[:, p].astype(np.float_)
+            _labels = pixelwise_labels[:, p].astype(np.int_)
+
+            if _labels[i] > 0:
+                _dir = save_dir_abnormal
+                _filename = os.path.join(_dir, f"p{p:03d}_i{i:04d}.jpg")
+            else:
+                _dir = os.path.join(save_dir_normal, f"p{p:03d}")
+                os.makedirs(_dir, exist_ok=True)
+                _filename = os.path.join(_dir, f"i{i:04d}.jpg")
+
+            cv2plot.plot_scatter(
+                _scores,
+                _labels,
+                label_names,
+                extra_labels=_labels,
+                extra_scores=_gt_scores,
+                th=th,
+                filename=_filename,
+            )
+
+        pi_pairs = [
+            (p, i)
+            for p in range(len(pixelwise_self_sim))
+            for i in range(len(pixelwise_self_sim[p]))
+        ]
+
+        Parallel(n_jobs=-1)(delayed(plot_pixelwise_self_sim)(p, i) for p, i in pi_pairs)
+        # for p, i in pi_pairs:
+        #     plot_pixelwise_self_sim(p, i)
 
 
 def _evaluate_anomaly_patch_detection(
@@ -112,8 +176,6 @@ def _evaluate_anomaly_patch_detection(
         results, filename=os.path.join(save_dir, "result_patch.csv")
     )
     utils.print_df(df)
-
-    return df
 
 
 def _get_result_anomaly_patch_detection(
@@ -153,7 +215,10 @@ def _get_result_anomaly_patch_detection(
     return _result
 
 
-def get_gap_result_df(gaps, masks, class_names, class_sizes, num_classes, save_dir):
+def analyze_gap(
+    gaps, masks, class_names, class_sizes, num_classes, save_dir, save_plot=False
+):
+
     if gaps.ndim == 4:
         gaps = gaps[:, :, 0, 0]
 
@@ -162,7 +227,7 @@ def get_gap_result_df(gaps, masks, class_names, class_sizes, num_classes, save_d
 
     is_anomaly_gt = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
 
-    return _evaluate_tail_class_detection(
+    _evaluate_tail_class_detection(
         gaps=gaps,
         class_sizes_gt=class_sizes,
         is_anomaly_gt=is_anomaly_gt,
@@ -170,8 +235,46 @@ def get_gap_result_df(gaps, masks, class_names, class_sizes, num_classes, save_d
         save_dir=save_dir,
     )
 
+    # FIXME:
+    if save_plot:
 
+        _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
+        _few_shot_labels = (class_sizes < 20).tolist()
+        save_plot_dir = os.path.join(save_dir, "plot_gap")
 
+        self_sim = class_size.compute_self_sim(gaps)
+
+        self_sim_abnormal_plot_dir = os.path.join(save_plot_dir, "self_sim_abnormal")
+        self_sim_few_shot_plot_dir = os.path.join(save_plot_dir, "self_sim_few_shot")
+        self_sim_else_plot_dir = os.path.join(save_plot_dir, "self_sim_else")
+        os.makedirs(self_sim_abnormal_plot_dir, exist_ok=True)
+        os.makedirs(self_sim_few_shot_plot_dir, exist_ok=True)
+        os.makedirs(self_sim_else_plot_dir, exist_ok=True)
+
+        def plot_gap_self_sim(index):
+            print(f"plotting ngap for {index}")
+            _scores = self_sim[index].numpy()
+            _is_anomaly = _anomaly_labels[index]
+            _is_few_shot = _few_shot_labels[index]
+            if _is_anomaly:
+                _filename = os.path.join(self_sim_abnormal_plot_dir, f"{index:04d}.jpg")
+            elif _is_few_shot:
+                _filename = os.path.join(self_sim_few_shot_plot_dir, f"{index:04d}.jpg")
+            else:
+                _filename = os.path.join(self_sim_else_plot_dir, f"{index:04d}.jpg")
+            plot_scatter(
+                _scores,
+                class_labels,
+                class_label_names,
+                is_anomaly_gt,
+                th=np.cos(np.pi / 4),
+                filename=_filename,
+            )
+
+        # Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
+
+        for i in range(len(self_sim)):
+            plot_gap_self_sim(i)
 
 
 def _evaluate_tail_class_detection(
@@ -215,8 +318,6 @@ def _evaluate_tail_class_detection(
     )
 
     utils.print_df(df)
-
-    return df
 
 
 def _get_result_tail_class_detection(
@@ -517,211 +618,7 @@ def _plot_tensor(tensor, filename="output.png"):
     plt.savefig(filename)
     plt.close()
 
-def plot_patch_analysis(feas: torch.Tensor, masks, save_dir, save_plot=True):
 
-    downsized_masks = _downsize_masks(masks, mode="bilinear")
-
-    if downsized_masks.ndim == 4:
-        downsized_masks = downsized_masks[:, 0, :, :]
-
-    n, fea_dim, h, w = feas.shape
-
-    label_names = ["normal", "abnormal"]
-    anomaly_patch_scores_gt = downsized_masks.reshape((-1))
-    is_anomaly_patch_gt = torch.round(anomaly_patch_scores_gt).to(torch.long)
-    feature_map_shape = [28, 28]
-    features = (
-        feas.reshape((feas.shape[0], feas.shape[1], -1))
-        .permute(0, 2, 1)
-        .reshape((-1, fea_dim))
-    )
-
-    if save_plot:
-        save_dir_normal = os.path.join(save_dir, "plot", "self_sim", "normal")
-        save_dir_abnormal = os.path.join(save_dir, "plot", "self_sim", "abnormal")
-
-        os.makedirs(save_dir_normal, exist_ok=True)
-        os.makedirs(save_dir_abnormal, exist_ok=True)
-
-        th = np.cos(np.pi / 8)  # FIXME: tmp
-        pixelwise_feas = feas.reshape(n, fea_dim, -1).permute(2, 0, 1)
-        pixelwise_gt_scores = anomaly_patch_scores_gt.reshape(n, h * w).numpy()
-        pixelwise_labels = is_anomaly_patch_gt.reshape(n, h * w).numpy()
-        pixelwise_self_sim = class_size.compute_self_sim(pixelwise_feas).numpy()
-
-        def plot_pixelwise_self_sim(p, i):
-            print(f"Plotting (p,i) = ({p}, {i})")
-
-            _self_sim = pixelwise_self_sim[p]
-            _scores = _self_sim[i]
-            _gt_scores = pixelwise_gt_scores[:, p].astype(np.float_)
-            _labels = pixelwise_labels[:, p].astype(np.int_)
-
-            if _labels[i] > 0:
-                _dir = save_dir_abnormal
-                _filename = os.path.join(_dir, f"p{p:03d}_i{i:04d}.jpg")
-            else:
-                _dir = os.path.join(save_dir_normal, f"p{p:03d}")
-                os.makedirs(_dir, exist_ok=True)
-                _filename = os.path.join(_dir, f"i{i:04d}.jpg")
-
-            cv2plot.plot_scatter(
-                _scores,
-                _labels,
-                label_names,
-                extra_labels=_labels,
-                extra_scores=_gt_scores,
-                th=th,
-                filename=_filename,
-            )
-
-        pi_pairs = [
-            (p, i)
-            for p in range(len(pixelwise_self_sim))
-            for i in range(len(pixelwise_self_sim[p]))
-        ]
-
-        Parallel(n_jobs=-1)(delayed(plot_pixelwise_self_sim)(p, i) for p, i in pi_pairs)
-        # for p, i in pi_pairs:
-        #     plot_pixelwise_self_sim(p, i)
-
-def plot_gap_analysis(
-    gaps, masks, class_names, class_sizes, num_classes, save_dir, save_plot=True
-):
-
-    if gaps.ndim == 4:
-        gaps = gaps[:, :, 0, 0]
-
-    class_labels, class_label_names = _convert_class_names_to_labels(class_names)
-    class_labels = class_labels.numpy()
-
-    is_anomaly_gt = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
-
-    _evaluate_tail_class_detection(
-        gaps=gaps,
-        class_sizes_gt=class_sizes,
-        is_anomaly_gt=is_anomaly_gt,
-        num_classes=num_classes,
-        save_dir=save_dir,
-    )
-
-    # FIXME:
-    if save_plot:
-
-        _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
-        _few_shot_labels = (class_sizes < 20).tolist()
-        save_plot_dir = os.path.join(save_dir, "plot_gap")
-
-        self_sim = class_size.compute_self_sim(gaps)
-
-        self_sim_abnormal_plot_dir = os.path.join(save_plot_dir, "self_sim_abnormal")
-        self_sim_few_shot_plot_dir = os.path.join(save_plot_dir, "self_sim_few_shot")
-        self_sim_else_plot_dir = os.path.join(save_plot_dir, "self_sim_else")
-        os.makedirs(self_sim_abnormal_plot_dir, exist_ok=True)
-        os.makedirs(self_sim_few_shot_plot_dir, exist_ok=True)
-        os.makedirs(self_sim_else_plot_dir, exist_ok=True)
-
-        def plot_gap_self_sim(index):
-            print(f"plotting ngap for {index}")
-            _scores = self_sim[index].numpy()
-            _is_anomaly = _anomaly_labels[index]
-            _is_few_shot = _few_shot_labels[index]
-            if _is_anomaly:
-                _filename = os.path.join(self_sim_abnormal_plot_dir, f"{index:04d}.jpg")
-            elif _is_few_shot:
-                _filename = os.path.join(self_sim_few_shot_plot_dir, f"{index:04d}.jpg")
-            else:
-                _filename = os.path.join(self_sim_else_plot_dir, f"{index:04d}.jpg")
-            plot_scatter(
-                _scores,
-                class_labels,
-                class_label_names,
-                is_anomaly_gt,
-                th=np.cos(np.pi / 4),
-                filename=_filename,
-            )
-
-        # Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
-
-        for i in range(len(self_sim)):
-            plot_gap_self_sim(i)
-
-import pandas as pd
-def average_dfs(dfs):
-    # Concatenate dataframes
-    combined_df = pd.concat(dfs)
-
-    # Identify numeric columns
-    numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
-
-    # Compute the mean only for numeric columns
-    avg_df = combined_df[numeric_cols].groupby(combined_df.index).mean()
-
-    # For non-numeric columns, use the value from the first dataframe in the list
-    non_numeric_cols = combined_df.select_dtypes(exclude=[np.number]).columns
-    for col in non_numeric_cols:
-        avg_df[col] = dfs[0][col]
-
-    return avg_df
-
-# if __name__ == "__main__":
-    
-#     # Create sample dataframes
-#     df1 = pd.DataFrame({
-#         'A': [1, 2, 3],
-#         'B': [4, 5, 6],
-#         'C': ['foo', 'bar', 'baz']
-#     })
-
-#     df2 = pd.DataFrame({
-#         'A': [7, 8, 9],
-#         'B': [10, 11, 12],
-#         'C': ['qux', 'quux', 'corge']
-#     })
-
-#     df3 = pd.DataFrame({
-#         'A': [13, 14, 15],
-#         'B': [16, 17, 18],
-#         'C': ['garply', 'waldo', 'fred']
-#     })
-
-#     # Use the function to average the dataframes
-#     avg_df = average_dataframes([df1, df2, df3])
-
-#     # Display the result
-#     print(avg_df)
-
-def analyze_mvtec():
-    seeds = [0, 2, 7]
-    data_names = ['mvtec_pareto_nr10', 'mvtec_step_nr10_tk1_tr60', 'mvtec_step_nr10_tk4_tr60']
-    config_names = ['tailedpatch_mvtec_01', 'tailedpatch_mvtec_05', 'tailedpatch_mvtec_06', 'tailedpatch_mvtec_07']
-
-    dfs = []
-    for seed in seeds:
-        for config_name in config_names:
-            for data_name in data_names:    
-                
-                extracted_path = f'./artifacts/anomaly_detection_{data_name}_seed{seed}_mvtec-multiclass/{config_name}/all/extracted.pt' 
-
-                try:
-                    _df = analyze_extracted(
-                        extracted_path=extracted_path,
-                        data_name=data_name,
-                        config_name=config_name,
-                        seed=seed
-                    )
-                    dfs.append(_df)
-                except:
-                    pass
-    
-    avg_df = average_dfs(dfs)
-    os.makedirs('./logs')
-    avg_df.to_csv('./logs/mvtec_analysis.csv', index=False)
-
-# mvtec:
 if __name__ == "__main__":
-    analyze_mvtec()
-    
-    
-
-
+    args = parse_args()
+    analyze_extracted(args)
