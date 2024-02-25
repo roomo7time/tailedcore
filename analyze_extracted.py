@@ -71,10 +71,8 @@ def analyze_extracted(args):
 
     save_log_dir = os.path.join("./logs", f"{args.data_name}_{args.config_name}")
 
-    analyze_gap(
-        gaps, masks, class_names, class_sizes, save_log_dir, save_plot=False
-    )
-    analyze_patch(feas, masks, gaps, save_log_dir, save_plot=False)
+    analyze_gap(gaps, masks, class_names, class_sizes, save_log_dir, save_plot=False)
+    # analyze_patch(feas, masks, gaps, save_log_dir, save_plot=False)
 
 
 def analyze_patch(feas: torch.Tensor, masks, gaps, save_dir, save_plot=False):
@@ -153,7 +151,7 @@ def analyze_patch(feas: torch.Tensor, masks, gaps, save_dir, save_plot=False):
 def _evaluate_anomaly_patch_detection(
     is_anomaly_patch_gt, features, feature_map_shape, gaps, save_dir
 ) -> dict:
-    
+
     method_names = ["lof", "lof-scs_symmin"]
     results = []
     for method_name in method_names:
@@ -272,6 +270,16 @@ def _evaluate_tail_class_detection(
         "lof",
         "scs_symmin",
         "scs_indep",
+        "if",
+        "ocsvm",
+        "dbscan",
+        "dbscan_tunned",
+        "dbscan_tunned_elbow",
+        "dbscan_adaptive_elbow",
+        "kmeans",
+        "gmm",
+        "kde",
+        "affprop"
     ]
 
     results = []
@@ -295,7 +303,7 @@ def _get_result_tail_class_detection(
     method_name,
     class_sizes_gt,
     is_anomaly_gt,
-    gaps,
+    gaps: torch.Tensor,
 ):
 
     if method_name == "lof":
@@ -312,7 +320,117 @@ def _get_result_tail_class_detection(
             gaps, return_class_sizes=True
         )
         is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
-        tail_scores = 1 -class_sizes_pred/class_sizes_pred.max()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+    elif method_name == "if":
+        from sklearn.ensemble import IsolationForest
+
+        clf = IsolationForest(random_state=0)
+        X = gaps.numpy()
+        clf.fit(X)
+        tail_scores = torch.from_numpy(clf.decision_function(X)).float()
+        is_tail_pred = torch.from_numpy(clf.predict(X) == -1).long()
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    elif method_name == "ocsvm":
+        from sklearn.svm import OneClassSVM
+
+        X = gaps.numpy()
+        ocsvm = OneClassSVM(gamma="auto").fit(X)
+        tail_scores = torch.from_numpy(ocsvm.decision_function(X)).float()
+        is_tail_pred = torch.from_numpy(ocsvm.predict(X) == -1).long()
+        class_sizes_pred = torch.zeros_like(tail_scores)
+
+    elif method_name == "dbscan":
+        from sklearn.cluster import DBSCAN
+
+        X = gaps.numpy()
+        dbscan = DBSCAN().fit(X)
+        labels = dbscan.labels_
+        is_tail_pred = torch.from_numpy(labels == -1).long()
+        tail_scores = is_tail_pred.float()
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
+    elif method_name == "dbscan_tunned":    # cheating
+        from sklearn.cluster import DBSCAN
+
+        X = F.normalize(gaps, dim=-1).numpy()
+        dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
+        labels = dbscan.labels_
+        is_tail_pred = torch.from_numpy(labels == -1).long()
+        tail_scores = is_tail_pred.float()
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
+    elif method_name == "dbscan_tunned_elbow":    # cheating
+        from sklearn.cluster import DBSCAN
+
+        X = F.normalize(gaps, dim=-1).numpy()
+        dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
+        labels = dbscan.labels_
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    
+    elif method_name == "dbscan_adaptive_elbow":
+        from sklearn.cluster import DBSCAN
+
+        self_sim = class_size.compute_self_sim(gaps, normalize=True)
+        min_sim = max(class_size.compute_self_sim_min(self_sim).item(), 0)
+        X = F.normalize(gaps, dim=-1).numpy()
+        dbscan = DBSCAN(min_samples=1, eps=np.cos(np.arccos(min_sim) / 2)).fit(X)
+        labels = dbscan.labels_
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "kmeans":
+        from sklearn.cluster import KMeans
+        
+        X = gaps.numpy()
+        kmeans = KMeans(n_clusters=3, random_state=0).fit(X)  # Adjust 'n_clusters' as needed
+        labels = kmeans.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(np.array([cluster_counts[label] for label in labels])).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "gmm":
+        from sklearn.mixture import GaussianMixture
+
+        X = gaps.numpy()
+        gmm = GaussianMixture().fit(X)
+        labels = gmm.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(np.array([cluster_counts[label] for label in labels])).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "kde":
+        from sklearn.neighbors import KernelDensity
+
+        X = gaps.numpy()  
+        kde = KernelDensity(kernel='gaussian', bandwidth=0.5).fit(X)
+        log_densities = kde.score_samples(X)
+        log_densities_torch = torch.from_numpy(log_densities).float()
+        tail_scores = -log_densities_torch
+        class_sizes_pred = torch.zeros_like(tail_scores)
+        is_tail_pred = torch.zeros_like(class_sizes_pred).long()
+        
+    elif method_name == "affprop":  # affinity propagation
+        from sklearn.cluster import AffinityPropagation
+        
+        X = gaps.numpy()
+        affinity_propagation = AffinityPropagation(random_state=0).fit(X)
+        labels = affinity_propagation.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(np.array([cluster_counts[label] for label in labels])).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
     else:
         raise NotImplementedError()
 
@@ -320,9 +438,15 @@ def _get_result_tail_class_detection(
 
     is_missing_tail = (is_tail_pred - is_tail_gt) < 0
     is_included_anomaly = (is_tail_pred + is_anomaly_gt) > 1
+    is_included_head = (is_tail_pred - is_tail_gt) > 0
 
-    num_missing_tail = is_missing_tail.sum().item()
-    num_included_anomaly = is_included_anomaly.sum().item()
+    # num_missing_tail = is_missing_tail.sum().item()
+    # num_included_anomaly = is_included_anomaly.sum().item()
+    ratio_missing_tail = is_missing_tail.sum().item() / is_tail_gt.sum().item()
+    ratio_included_anomaly = is_included_anomaly.sum().item() / is_anomaly_gt.sum().item()
+    ratio_included_head = is_included_head.sum().item() / max(is_tail_pred.sum().item(), 1)
+
+
     class_size_pred_error = (
         (
             abs(class_sizes_pred - class_sizes_gt)
@@ -336,11 +460,12 @@ def _get_result_tail_class_detection(
 
     return {
         "method": method_name,
-        "num_missing_tail": num_missing_tail,
-        "num_included_anomaly": num_included_anomaly,
-        "tail_pred_acc": tail_pred_acc,
+        "ratio_missing_tail": ratio_missing_tail,
+        "ratio_included_anomaly": ratio_included_anomaly,
+        "ratio_included_head": ratio_included_head,
+        "auroc": metrics.roc_auc_score(is_tail_gt, tail_scores),
         "class_size_pred_error": class_size_pred_error,
-        "auroc": metrics.roc_auc_score(is_tail_gt, tail_scores)
+        "tail_pred_acc": tail_pred_acc,
     }
 
 
@@ -426,14 +551,11 @@ def _convert_class_names_to_labels(class_names):
 
     return torch.LongTensor(class_labels), class_label_names
 
+
 def convert_indices_to_bool(n: int, indices: torch.Tensor) -> torch.Tensor:
     bool_array = torch.zeros((n), dtype=torch.long)
     bool_array[indices] = 1
     return bool_array
-
-
-
-
 
 
 def plot_scatter(scores, labels, label_names, extra_labels, th, filename):

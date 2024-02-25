@@ -88,7 +88,8 @@ def predict_num_samples_per_class(
         num_samples_per_class.append(_num_samples_in_current_class)
         class_sizes_sorted = class_sizes_sorted[_num_samples_in_current_class:]
 
-    return torch.FloatTensor(num_samples_per_class).sort(descending=True)[0]
+    # return torch.FloatTensor(num_samples_per_class).sort(descending=True)[0]
+    return torch.LongTensor(num_samples_per_class).sort(descending=True)[0]
 
 
 def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
@@ -102,10 +103,12 @@ def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
         ],
         dim=1,
     )
+
     ods = compute_orthogonal_distances(
         _num_samples_per_class, _num_samples_per_class[[0, -1], :]
     )
-    max_K_idx = ods.argmax() + 1
+    _max_K_idx = ods.argmax() + 1
+    max_K_idx = min(_max_K_idx, len(num_samples_per_class)-1)
     max_K = num_samples_per_class[max_K_idx].item()
 
     few_shot_idxes = (class_sizes <= max_K).to(torch.long)
@@ -325,7 +328,7 @@ def compute_orthogonal_distances(
     # Calculate the slope of the line (y = mx + c)
     dx, dy = x2 - x1, y2 - y1
     if dx == 0:  # Special case for vertical line
-        return [abs(x - x1) for x, y in points]
+        return torch.FloatTensor([abs(x - x1) for x, y in points])
 
     m = dy / dx
     c = y1 - m * x1
