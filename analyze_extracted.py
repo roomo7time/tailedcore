@@ -92,7 +92,7 @@ def _evaluate_anomaly_patch_detection(
     is_anomaly_patch_gt, features, feature_map_shape, save_dir
 ) -> dict:
 
-    method_names = ["lof", "lof-scs_symmin"]
+    method_names = ["lof", "lof-scs_symmin", "scs_symmin"]
     results = []
     for method_name in method_names:
         _result = _get_result_anomaly_patch_detection(
@@ -125,6 +125,11 @@ def _get_result_anomaly_patch_detection(
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lof_idxes)
     elif method_name == "lof-scs_symmin":
         _, lofcsp_idxes, outlier_scores = TailedLOFSampler(tail_th_type="symmin").run(
+            features, feature_map_shape, return_outlier_scores=True
+        )
+        is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
+    elif method_name == "scs_symmin":
+        _, lofcsp_idxes, outlier_scores = TailedLOFSampler(tail_th_type="symmin", without_lof=True).run(
             features, feature_map_shape, return_outlier_scores=True
         )
         is_anomaly_patch_pred = 1 - convert_indices_to_bool(len(features), lofcsp_idxes)
@@ -727,33 +732,6 @@ def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
 
     return avg_df
 
-# if __name__ == "__main__":
-    
-#     # Create sample dataframes
-#     df1 = pd.DataFrame({
-#         'A': [1, 2, 3],
-#         'B': [4, 5, 6],
-#         'C': ['foo', 'bar', 'baz']
-#     })
-
-#     df2 = pd.DataFrame({
-#         'A': [7, 8, 9],
-#         'B': [10, 11, 12],
-#         'C': ['qux', 'quux', 'corge']
-#     })
-
-#     df3 = pd.DataFrame({
-#         'A': [13, 14, 15],
-#         'B': [16, 17, 18],
-#         'C': ['garply', 'waldo', 'fred']
-#     })
-
-#     # Use the function to average the dataframes
-#     avg_df = average_dataframes([df1, df2, df3])
-
-#     # Display the result
-#     print(avg_df)
-
 def analyze_mvtec(type='gap'):
     seeds = [0, 2, 7]
     data_names = ['mvtec_pareto_nr10', 'mvtec_step_nr10_tk1_tr60', 'mvtec_step_nr10_tk4_tr60']
@@ -788,7 +766,7 @@ def analyze_mvtec(type='gap'):
                     pass
     
     avg_df = average_dfs(dfs)
-    os.makedirs('./logs')
+    os.makedirs('./logs', exist_ok=True)
     avg_df.to_csv(f'./logs/analysis_mvtec_{type}.csv', index=False)
 
 # mvtec:
