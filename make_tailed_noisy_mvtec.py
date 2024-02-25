@@ -9,23 +9,24 @@ from collections import defaultdict
 
 from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict, save_dicts_to_csv
 
-# _MVTEC_CLASS_LIST = [
-#     "bottle",
-#     "cable",
-#     "capsule",
-#     "carpet",
-#     "grid",
-#     "hazelnut",
-#     "leather",
-#     "metal_nut",
-#     "pill",
-#     "screw",
-#     "tile",
-#     "toothbrush",
-#     "transistor",
-#     "wood",
-#     "zipper",
-# ]
+import argparse
+
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Data processing script.")
+    parser.add_argument("--tail_type", type=str, choices=["step", "pareto"], default="pareto", help="")
+    parser.add_argument("--step_tail_k", type=int, default=1, choices=[1, 4], help="")
+    parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
+    parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
+    parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
+    parser.add_argument("--source_dir", type=str, default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec", 
+                        # choices=[
+                        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
+                        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
+                        # ],
+                        help="")
+    parser.add_argument("--seed", type=int, default=0, help="")
+    return parser.parse_args()
 
 _DATA_CONFIG_ROOT = './data_configs'
 
@@ -70,12 +71,7 @@ def make_data_step(
     seed: int=0,
 ) -> None:
     set_seed(seed)
-    data_config_name = os.path.join(_DATA_CONFIG_ROOT, os.path.basename(source_dir), f'step_nr{int(noise_ratio*100):02d}_k{tail_k}_seed{seed}')
-
-    if noise_on_tail:
-        data_config_name += f"_tailnoised"
-    
-    data_config_path = f"{data_config_name}.pkl"
+    data_config_path = f"{os.path.join(_DATA_CONFIG_ROOT,  os.path.basename(target_dir))}.pkl"
 
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
@@ -118,13 +114,7 @@ def make_data_pareto(
 ) -> None:
     
     set_seed(seed)
-
-    data_config_name = os.path.join(_DATA_CONFIG_ROOT, os.path.basename(source_dir), f'pareto_nr{int(noise_ratio*100):02d}_seed{seed}')
-
-    if noise_on_tail:
-        data_config_name += f"_tailnoised"
-    
-    data_config_path = f"{data_config_name}.pkl"
+    data_config_path = f"{os.path.join(_DATA_CONFIG_ROOT,  os.path.basename(target_dir))}.pkl"
     
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
@@ -546,54 +536,48 @@ def get_subdirectories(directory_path):
     return subdirectories
 
 
+def make_data(args):
+ 
+    target_dir = f"{args.source_dir}_{args.tail_type}_nr{int(args.noise_ratio*100):02d}"
 
-def main(seed):
-    # arguments
-    tail_type = "step"
-    # tail_type = "pareto"
+    if args.tail_type == "step":
 
-    tail_k = 4  # 4 or 1
-    noise_on_tail = False
-    noise_ratio = 0.1
+        target_dir += f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
+        if args.noise_on_tail:
+            target_dir += "_tailnoised"
+        target_dir += f"_seed{args.seed}"
 
-    # mvtec
-    # source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec_anomaly_detection"
-    # target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_mvtec_{tail_type}_nr{int(noise_ratio*100):02d}"
-
-    # visa_
-    source_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
-    target_dir = f"/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/symlink_visa_{tail_type}_nr{int(noise_ratio*100):02d}"
-
-    if tail_type == "step" and tail_k is not None:
-        target_dir += f"_k{tail_k}"
-    if noise_on_tail:
-        target_dir += f"_tailnoised"
-
-    target_dir += f"_seed{seed}"
-
-    set_seed(seed)
-    if tail_type == "step":
         make_data_step(
-            source_dir,
+            args.source_dir,
             target_dir,
-            tail_k=tail_k,
-            noise_on_tail=noise_on_tail,
-            seed=seed,
+            noise_on_tail=args.noise_on_tail,
+            tail_k=args.step_tail_k,
+            tail_class_ratio=args.step_tail_class_ratio,
+            seed=args.seed,
         )
-    elif tail_type == "pareto":
-        make_data_pareto(
-            source_dir,
-            target_dir,
-            noise_on_tail=noise_on_tail,
-            seed=seed,
-        )
+    elif args.tail_type == "pareto":
 
+        if args.noise_on_tail:
+            target_dir += "_tailnoised"
+        target_dir += f"_seed{args.seed}"
+
+        make_data_pareto(
+            args.source_dir,
+            target_dir,
+            noise_on_tail=args.noise_on_tail,
+            seed=args.seed,
+        )
+    else:
+        raise NotImplementedError()
+    
+    print(f"target_dir: {target_dir}")
+
+    # verification
     compare_directories(
-        source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
+        args.source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
     )
 
-
 if __name__ == "__main__":
-    seed = 0
-    main(seed)
     
+    args = get_args()
+    make_data(args)    
