@@ -1,15 +1,8 @@
-
 #!/bin/bash
-
-# Create logs directory if it doesn't exist
-mkdir -p ./logs
 
 # Define config names
 CONFIG_NAMES=(
-    "tailedpatch_mvtec_01"
-    "tailedpatch_mvtec_05"
-    "tailedpatch_mvtec_06"
-    "tailedpatch_mvtec_07"
+    "atailedpatch_mvtec_01"
 )
 
 # Define specific data names with their corresponding seeds
@@ -25,6 +18,6 @@ DATA_NAMES=(
 # Process each data name with each config name
 for data_name in "${DATA_NAMES[@]}"; do
     for config_name in "${CONFIG_NAMES[@]}"; do
-        python extract_artifacts.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
+        python evaluate.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
     done
 done

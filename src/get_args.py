@@ -24,7 +24,7 @@ def parse_args():
         # default="anomaly_detection/mvtec_step_nr10_tk1_tr60_seed0",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
-    parser.add_argument("--config_name", type=str, default="tailedpatch_mvtec_01")
+    parser.add_argument("--config_name", type=str, default="atailedpatch_mvtec_01")
 
     # # toy setting
     # parser.add_argument(
