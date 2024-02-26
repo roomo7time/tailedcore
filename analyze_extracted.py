@@ -703,17 +703,49 @@ from typing import List
 
 #     return avg_df
 
+# def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
+#     """
+#     Averages numeric columns in a list of dataframes, preserves non-numeric columns, 
+#     and places non-numeric columns on the left-most side of the resulting DataFrame.
+
+#     Parameters:
+#     dfs (List[pd.DataFrame]): List of Pandas DataFrames with the same columns and index
+
+#     Returns:
+#     pd.DataFrame: A new DataFrame with non-numeric columns on the left and 
+#                   averaged numeric columns on the right.
+#     """
+#     # Concatenate dataframes
+#     combined_df = pd.concat(dfs)
+
+#     # Identify numeric columns
+#     numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
+
+#     # Compute the mean only for numeric columns
+#     avg_numeric_df = combined_df[numeric_cols].groupby(combined_df.index).mean()
+
+#     # Extract non-numeric columns from the first dataframe in the list
+#     non_numeric_df = dfs[0][combined_df.select_dtypes(exclude=[np.number]).columns]
+
+#     # Concatenate non-numeric and numeric dataframes
+#     avg_df = pd.concat([non_numeric_df, avg_numeric_df], axis=1)
+
+#     return avg_df
+import pandas as pd
+import numpy as np
+from typing import List
+
 def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
     """
-    Averages numeric columns in a list of dataframes, preserves non-numeric columns, 
-    and places non-numeric columns on the left-most side of the resulting DataFrame.
+    Averages numeric columns in a list of dataframes, calculates the standard deviation for numeric columns,
+    preserves non-numeric columns, and places non-numeric columns on the left-most side of the resulting DataFrame.
 
     Parameters:
     dfs (List[pd.DataFrame]): List of Pandas DataFrames with the same columns and index
 
     Returns:
-    pd.DataFrame: A new DataFrame with non-numeric columns on the left and 
-                  averaged numeric columns on the right.
+    pd.DataFrame: A new DataFrame with non-numeric columns on the left, 
+                  followed by averaged numeric columns, and standard deviation of numeric columns on the right.
     """
     # Concatenate dataframes
     combined_df = pd.concat(dfs)
@@ -721,14 +753,18 @@ def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
     # Identify numeric columns
     numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
 
-    # Compute the mean only for numeric columns
+    # Compute the mean and std only for numeric columns
     avg_numeric_df = combined_df[numeric_cols].groupby(combined_df.index).mean()
+    std_numeric_df = combined_df[numeric_cols].groupby(combined_df.index).std()
+
+    # Rename columns in std_numeric_df to indicate they are standard deviations
+    std_numeric_df = std_numeric_df.add_suffix('_std')
 
     # Extract non-numeric columns from the first dataframe in the list
     non_numeric_df = dfs[0][combined_df.select_dtypes(exclude=[np.number]).columns]
 
-    # Concatenate non-numeric and numeric dataframes
-    avg_df = pd.concat([non_numeric_df, avg_numeric_df], axis=1)
+    # Concatenate non-numeric, average, and std dataframes
+    avg_df = pd.concat([non_numeric_df, avg_numeric_df, std_numeric_df], axis=1)
 
     return avg_df
 
