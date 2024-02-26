@@ -71,11 +71,11 @@ MVTEC_PARETO_CLASS_ORDER_EASY = [
     "leather",
     "tile",
     "toothbrush",
-    "grid",
-    "capsule",
-    "pill",
-    "screw",
-    "zipper",
+    "carpet",
+    "wood",
+    "cable",
+    "metal_nut",
+    "transistor",
 ]
 
 
@@ -98,19 +98,19 @@ def get_args():
         # ],
         help="",
     )
-    parser.add_argument("--seed", type=int, default=10, help="")
+    parser.add_argument("--seed", type=int, default=20, help="")
 
     # If there is already data info pkl, the below args are ignored
     parser.add_argument(
         "--step_tail_classes",
         nargs="+",
-        default=MVTEC_STEP_TAIL_CLASSES_HARD,
+        default=MVTEC_STEP_TAIL_CLASSES_EASY,
         help="A list of strings",
     )  # group 1
     parser.add_argument(
         "--pareto_class_order",
         nargs="+",
-        default=MVTEC_PARETO_CLASS_ORDER_HARD,
+        default=MVTEC_PARETO_CLASS_ORDER_EASY,
         help="A list of strings",
     )  # mvtec tk4 seed 1
 
