@@ -924,7 +924,7 @@ class AATailedPatch(BaseCore):
                     # Select only the images corresponding to relevant indices
                     relevant_images = images[[i - batch_idx * batch_size for i in relevant_indices]]
 
-                    for angle in range(0, 360, 45):
+                    for angle in range(0, 360, 30):
                         for flip in [0, 1]:
                             if (angle, flip) == (0, 0):
                                 continue
@@ -935,7 +935,6 @@ class AATailedPatch(BaseCore):
                                 flipped_images = relevant_images
                             
                             if angle != 0:
-                                height, width = center_crop_size
                                 horizontal_padding, vertical_padding = calculate_padding_for_rotation(center_crop_size[1], center_crop_size[0])
 
                                 padding = (horizontal_padding, horizontal_padding, vertical_padding, vertical_padding)
