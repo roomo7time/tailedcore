@@ -8,48 +8,148 @@ from copy import deepcopy
 from collections import defaultdict
 from typing import List
 
-from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict, save_dicts_to_csv
+from src.utils import (
+    set_seed,
+    modify_subfolders_in_path,
+    save_dict,
+    load_dict,
+    save_dicts_to_csv,
+)
 
 import argparse
 
 
+MVTEC_STEP_TAIL_CLASSES_HARD = [
+    "bottle",
+    "hazelnut",
+    "leather",
+    "tile",
+    "toothbrush",
+    "grid",
+    "capsule",
+    "pill",
+    "screw",
+    "zipper",
+]
+MVTEC_STEP_TAIL_CLASSES_EASY = [
+    "bottle",
+    "hazelnut",
+    "leather",
+    "tile",
+    "toothbrush",
+    "cable",
+    "metal_nut",
+    "transistor",
+    "carpet",
+    "wood",
+]
+MVTEC_PARETO_CLASS_ORDER_HARD = [
+    "carpet",
+    "wood",
+    "cable",
+    "metal_nut",
+    "transistor",
+    "bottle",
+    "hazelnut",
+    "leather",
+    "tile",
+    "toothbrush",
+    "grid",
+    "capsule",
+    "pill",
+    "screw",
+    "zipper",
+]
+MVTEC_PARETO_CLASS_ORDER_EASY = [
+    "screw",
+    "pill",
+    "grid",
+    "zipper",
+    "capsule",
+    "bottle",
+    "hazelnut",
+    "leather",
+    "tile",
+    "toothbrush",
+    "grid",
+    "capsule",
+    "pill",
+    "screw",
+    "zipper",
+]
+
+
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
-    parser.add_argument("--tail_type", type=str, choices=["step", "pareto"], default="step", help="")
+    parser.add_argument(
+        "--tail_type", type=str, choices=["step", "pareto"], default="pareto", help=""
+    )
     parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
-    parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
+    parser.add_argument("--step_tail_class_ratio", type=float, default=0.7, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
     parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
-    parser.add_argument("--source_dir", type=str, default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec", 
-                        # choices=[
-                        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
-                        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
-                        # ],
-                        help="")
-    parser.add_argument("--seed", type=int, default=3, help="")
-    # parser.add_argument('--tail_classes', nargs='+', default=None, help='A list of strings')
-    parser.add_argument('--tail_classes', nargs='+', default=['cable', 'capsule', 'hazelnut', 'screw', 'tile', 'toothbrush', 'bottle', 'zipper', 'pill'], help='A list of strings') # mvtec tk4 seed 1
+    parser.add_argument(
+        "--source_dir",
+        type=str,
+        default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
+        # choices=[
+        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
+        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
+        # ],
+        help="",
+    )
+    parser.add_argument("--seed", type=int, default=10, help="")
 
+    # If there is already data info pkl, the below args are ignored
+    parser.add_argument(
+        "--step_tail_classes",
+        nargs="+",
+        default=MVTEC_STEP_TAIL_CLASSES_HARD,
+        help="A list of strings",
+    )  # group 1
+    parser.add_argument(
+        "--pareto_class_order",
+        nargs="+",
+        default=MVTEC_PARETO_CLASS_ORDER_HARD,
+        help="A list of strings",
+    )  # mvtec tk4 seed 1
 
     return parser.parse_args()
 
-_DATA_CONFIG_ROOT = './data_configs'
+
+_DATA_CONFIG_ROOT = "./data_configs"
 
 
 def _load_data_config(data_config_path):
 
     data = load_dict(data_config_path)
 
-    files = data['files']
-    train_files = data['train_files']
-    anomaly_files = data['anomaly_files']
-    num_tail_samples = data['num_tail_samples']
-    num_noise_samples = data['num_noise_samples']
-    head_classes = data['head_classes']
+    files = data["files"]
+    train_files = data["train_files"]
+    anomaly_files = data["anomaly_files"]
+    num_tail_samples = data["num_tail_samples"]
+    num_noise_samples = data["num_noise_samples"]
+    head_classes = data["head_classes"]
 
-    return files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes
+    return (
+        files,
+        train_files,
+        anomaly_files,
+        num_tail_samples,
+        num_noise_samples,
+        head_classes,
+    )
 
-def _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path):
+
+def _save_data_config(
+    files,
+    train_files,
+    anomaly_files,
+    num_tail_samples,
+    num_noise_samples,
+    head_classes,
+    data_config_path,
+):
     data = {
         "files": files,
         "train_files": train_files,
@@ -60,10 +160,15 @@ def _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_n
     }
 
     save_dict(data, data_config_path)
-    save_dicts_to_csv([{
-        "num_tail_samples": num_tail_samples,
-        "num_noise_samples": num_noise_samples,
-    }], filename=os.path.splitext(data_config_path)[0] + '.csv')
+    save_dicts_to_csv(
+        [
+            {
+                "num_tail_samples": num_tail_samples,
+                "num_noise_samples": num_noise_samples,
+            }
+        ],
+        filename=os.path.splitext(data_config_path)[0] + ".csv",
+    )
 
 
 def make_data_step(
@@ -73,14 +178,23 @@ def make_data_step(
     noise_on_tail: bool = False,
     tail_k: int = 4,
     tail_class_ratio: float = 0.6,
-    seed: int=0,
+    seed: int = 0,
     tail_classes: List[str] = None,
 ) -> None:
     set_seed(seed)
-    data_config_path = f"{os.path.join(_DATA_CONFIG_ROOT,  os.path.basename(target_dir))}.pkl"
+    data_config_path = (
+        f"{os.path.join(_DATA_CONFIG_ROOT,  os.path.basename(target_dir))}.pkl"
+    )
 
     if os.path.exists(data_config_path):
-        files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
+        (
+            files,
+            train_files,
+            anomaly_files,
+            num_tail_samples,
+            num_noise_samples,
+            head_classes,
+        ) = _load_data_config(data_config_path)
     else:
 
         _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
@@ -98,7 +212,15 @@ def make_data_step(
             tail_classes=tail_classes,
         )
 
-    _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
+    _save_data_config(
+        files,
+        train_files,
+        anomaly_files,
+        num_tail_samples,
+        num_noise_samples,
+        head_classes,
+        data_config_path,
+    )
 
     _make_data(
         source_dir=source_dir,
@@ -118,24 +240,48 @@ def make_data_pareto(
     noise_ratio: float = 0.1,
     noise_on_tail: bool = False,  # TODO: need to be implemented
     seed: int = 0,
+    class_order=None,
 ) -> None:
-    
+
     set_seed(seed)
-    data_config_path = f"{os.path.join(_DATA_CONFIG_ROOT,  os.path.basename(target_dir))}.pkl"
-    
+    data_config_path = (
+        f"{os.path.join(_DATA_CONFIG_ROOT,  os.path.basename(target_dir))}.pkl"
+    )
+
     if os.path.exists(data_config_path):
-        files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
+        (
+            files,
+            train_files,
+            anomaly_files,
+            num_tail_samples,
+            num_noise_samples,
+            head_classes,
+        ) = _load_data_config(data_config_path)
     else:
 
         _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
 
         class_list = _MVTEC_CLASS_LIST
         files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
-        num_tail_samples, num_noise_samples, head_classes = _make_class_info_pareto_tail(
-            class_list, train_files, noise_ratio, noise_on_tail=noise_on_tail
+        num_tail_samples, num_noise_samples, head_classes = (
+            _make_class_info_pareto_tail(
+                class_list,
+                train_files,
+                noise_ratio,
+                noise_on_tail=noise_on_tail,
+                class_order=class_order,
+            )
         )
-    
-    _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
+
+    _save_data_config(
+        files,
+        train_files,
+        anomaly_files,
+        num_tail_samples,
+        num_noise_samples,
+        head_classes,
+        data_config_path,
+    )
 
     _make_data(
         source_dir=source_dir,
@@ -193,17 +339,21 @@ def _get_mvtec_base_file_info(source_dir):
 
     for class_name in _MVTEC_CLASS_LIST:
         files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name), source_dir, 
+            os.path.join(source_dir, class_name),
+            source_dir,
         )
         train_files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name, "train"), source_dir, 
+            os.path.join(source_dir, class_name, "train"),
+            source_dir,
         )
         test_files[class_name] = list_files_in_folders(
-            os.path.join(source_dir, class_name, "test"), source_dir, 
+            os.path.join(source_dir, class_name, "test"),
+            source_dir,
         )
 
         _test_good_files = list_files_in_folders(
-            os.path.join(source_dir, class_name, "test", "good"), source_dir, 
+            os.path.join(source_dir, class_name, "test", "good"),
+            source_dir,
         )
         anomaly_files[class_name] = [
             file for file in test_files[class_name] if file not in _test_good_files
@@ -240,6 +390,71 @@ def _select_tailed_noises(
 
 
 def _make_class_info_pareto_tail(
+    class_list,
+    train_files,
+    noise_ratio,
+    n_iter=100,
+    noise_on_tail=True,
+    class_order=None,
+):
+
+    pareto_alpha = 6.0  # hard-coded
+    target_class_dist = get_discrete_pareto_pmf(
+        alpha=pareto_alpha, sampe_space_size=len(class_list)
+    )
+    num_train_samples = {}
+    for train_class in train_files.keys():
+        num_train_samples[train_class] = len(train_files[train_class])
+
+    total_num_tail_samples = 0
+    _target_class_dist = deepcopy(target_class_dist)
+
+    if class_order is not None:
+        
+        for _ in range(n_iter):
+            class_names = list(num_train_samples.keys())
+
+            assert set(class_order) == set(class_names)
+
+            _current_class_dist = list(np.sort(_target_class_dist)[::-1])
+            _target_class_dist = np.empty_like(_target_class_dist)
+
+            for i, class_name in enumerate(class_order):
+                _target_class_dist[class_names.index(class_name)] = _current_class_dist[i]
+            _target_num_class_samples = redistribute_num_class_samples(
+                list(num_train_samples.values()), _target_class_dist
+            )
+            
+            total_num_tail_samples = sum(_target_num_class_samples)
+            target_num_class_samples = _target_num_class_samples
+    
+    else:
+        
+        for _ in range(n_iter):
+            np.random.shuffle(_target_class_dist)
+
+            _target_num_class_samples = redistribute_num_class_samples(
+                list(num_train_samples.values()), _target_class_dist
+            )
+            if sum(_target_num_class_samples) > total_num_tail_samples:
+                total_num_tail_samples = sum(_target_num_class_samples)
+                target_num_class_samples = _target_num_class_samples
+
+    num_tail_samples = {}
+    for i, class_name in enumerate(train_files.keys()):
+        num_tail_samples[class_name] = target_num_class_samples[i]
+
+    min_size = 20
+    if noise_on_tail:
+        min_size = 1
+    total_num_noise_samples = round(total_num_tail_samples * noise_ratio)
+    num_noise_samples = sample_name2size(
+        num_tail_samples, total_num_noise_samples, min_size
+    )
+
+    return num_tail_samples, num_noise_samples, []
+
+def __make_class_info_pareto_tail(
     class_list, train_files, noise_ratio, n_iter=100, noise_on_tail=True
 ):
 
@@ -277,19 +492,6 @@ def _make_class_info_pareto_tail(
     return num_tail_samples, num_noise_samples, []
 
 
-# def sample_keys_from_dict_of_int(d, n_samples):
-#     # Flatten the dictionary: [(key, value), ...]
-#     flattened = [(key, "") for key, value in d.items() for _ in range(value)]
-
-#     # Randomly sample n_samples elements from the flattened list
-#     sampled = random.sample(flattened, n_samples)
-
-#     # Extract and return keys and values of the sampled elements
-#     num_samples_by_keys = defaultdict(int)
-
-#     for key, _ in sampled:
-#         num_samples_by_keys[key] += 1
-#     return dict(num_samples_by_keys)
 
 def sample_name2size(name2size, n_samples, min_size=20):
     # Flatten the dictionary: [(key, value), ...]
@@ -305,7 +507,7 @@ def sample_name2size(name2size, n_samples, min_size=20):
         if class_size >= min_size:
             num_samples_by_keys[class_name] += 1
             counter += 1
-        
+
         if counter == n_samples:
             break
 
@@ -357,7 +559,7 @@ def _make_class_info_step_tail(
 ):
     assert not noise_on_tail
     _num_tail_classes = round(len(class_list) * tail_class_ratio)
-    
+
     if tail_classes is None:
         tail_classes = random.sample(class_list, _num_tail_classes)
 
@@ -410,7 +612,9 @@ def _make_file_mapper(
     return file_mapper
 
 
-def list_files_in_folders(directory, source_dir, exts=["png", "jpg", "jpeg", "JPG", "JPEG"]):
+def list_files_in_folders(
+    directory, source_dir, exts=["png", "jpg", "jpeg", "JPG", "JPEG"]
+):
     """
     List all files with given extensions in a directory and its subdirectories.
 
@@ -425,6 +629,7 @@ def list_files_in_folders(directory, source_dir, exts=["png", "jpg", "jpeg", "JP
         all_files.extend(files)
 
     return all_files
+
 
 def _list_files_in_folders(directory, source_dir, ext="png"):
     """
@@ -534,6 +739,7 @@ def is_in_mvtec_train_folder(file_path, base_dir):
     parts = rel_path.split(os.sep)
     return "train" in parts and parts.index("train") == 1
 
+
 def get_subdirectories(directory_path):
     """
     Returns a list of subdirectory names found in the given directory path.
@@ -544,17 +750,23 @@ def get_subdirectories(directory_path):
     Returns:
     list: A list of subdirectory names.
     """
-    subdirectories = [d for d in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, d))]
+    subdirectories = [
+        d
+        for d in os.listdir(directory_path)
+        if os.path.isdir(os.path.join(directory_path, d))
+    ]
     return subdirectories
 
 
 def make_data(args):
- 
+
     target_dir = f"{args.source_dir}_{args.tail_type}_nr{int(args.noise_ratio*100):02d}"
 
     if args.tail_type == "step":
 
-        target_dir += f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
+        target_dir += (
+            f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
+        )
         if args.noise_on_tail:
             target_dir += "_tailnoised"
         target_dir += f"_seed{args.seed}"
@@ -566,7 +778,7 @@ def make_data(args):
             tail_k=args.step_tail_k,
             tail_class_ratio=args.step_tail_class_ratio,
             seed=args.seed,
-            tail_classes=args.tail_classes
+            tail_classes=args.step_tail_classes,
         )
     elif args.tail_type == "pareto":
 
@@ -579,10 +791,11 @@ def make_data(args):
             target_dir,
             noise_on_tail=args.noise_on_tail,
             seed=args.seed,
+            class_order=args.pareto_class_order,
         )
     else:
         raise NotImplementedError()
-    
+
     print(f"target_dir: {target_dir}")
 
     # verification
@@ -590,7 +803,8 @@ def make_data(args):
         args.source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
     )
 
+
 if __name__ == "__main__":
-    
+
     args = get_args()
-    make_data(args)    
+    make_data(args)

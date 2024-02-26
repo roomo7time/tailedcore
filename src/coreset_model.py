@@ -924,7 +924,7 @@ class AATailedPatch(BaseCore):
                     # Select only the images corresponding to relevant indices
                     relevant_images = images[[i - batch_idx * batch_size for i in relevant_indices]]
 
-                    for angle in range(0, 360, 30):
+                    for angle in range(0, 360, 15):
                         for flip in [0, 1]:
                             if (angle, flip) == (0, 0):
                                 continue

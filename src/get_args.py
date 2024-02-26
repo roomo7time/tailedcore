@@ -19,7 +19,7 @@ def parse_args():
         "--data_sub_path",
         type=str,
         # mvtec
-        default="anomaly_detection/mvtec_step_nr10_tk4_tr60_seed0",
+        default="anomaly_detection/mvtec_step_nr10_tk4_tr60_seed7",
         # default="anomaly_detection/mvtec_step_nr10_tk4_tr60_seed2",
         # default="anomaly_detection/mvtec_step_nr10_tk1_tr60_seed0",
     )

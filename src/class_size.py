@@ -114,6 +114,27 @@ def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
     few_shot_idxes = (class_sizes <= max_K).to(torch.long)
     return few_shot_idxes
 
+def elbow(scores: torch.Tensor, sort=True, quantize=True):
+    if sort:
+        if quantize:
+            pass
+        scores = scores.sort(descending=True)[0]
+    _scores = torch.cat(
+        [
+            torch.arange(len(scores))[:, None],
+            scores[:, None],
+        ],
+        dim=1,
+    )
+
+    ods = compute_orthogonal_distances(
+        _scores, _scores[[0, -1], :]
+    )
+
+    elbow_idx = ods.argmax()
+
+    return scores[elbow_idx]
+    
 
 def compute_self_sim_min(self_sim: torch.Tensor, mode="min") -> torch.Tensor:
     mins = torch.empty(len(self_sim))

@@ -405,8 +405,6 @@ class GreedyCoresetSampler(BaseSampler):
             coreset_indices.append(torch.argmax(min_distances, dim=0).item())
             current_distances = current_distances.cpu()
             del current_distances
-            gc.collect()
-            torch.cuda.empty_cache()
 
         return coreset_indices
 
