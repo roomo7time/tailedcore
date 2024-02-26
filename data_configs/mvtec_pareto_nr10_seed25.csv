@@ -1,0 +1,2 @@
+num_tail_samples,num_noise_samples
+"{'tile': 12, 'toothbrush': 9, 'metal_nut': 5, 'transistor': 5, 'bottle': 35, 'pill': 194, 'carpet': 7, 'cable': 5, 'grid': 122, 'wood': 5, 'zipper': 78, 'screw': 320, 'hazelnut': 24, 'capsule': 52, 'leather': 17}","{'screw': 33, 'capsule': 7, 'grid': 10, 'zipper': 7, 'pill': 27, 'hazelnut': 3, 'bottle': 2}"
