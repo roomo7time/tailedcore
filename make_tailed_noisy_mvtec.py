@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import pareto
 from copy import deepcopy
 from collections import defaultdict
+from typing import List
 
 from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict, save_dicts_to_csv
 
@@ -15,17 +16,21 @@ import argparse
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
     parser.add_argument("--tail_type", type=str, choices=["step", "pareto"], default="step", help="")
-    parser.add_argument("--step_tail_k", type=int, default=1, choices=[1, 4], help="")
+    parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
     parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
-    parser.add_argument("--source_dir", type=str, default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa", 
+    parser.add_argument("--source_dir", type=str, default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec", 
                         # choices=[
                         #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
                         #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
                         # ],
                         help="")
-    parser.add_argument("--seed", type=int, default=0, help="")
+    parser.add_argument("--seed", type=int, default=3, help="")
+    # parser.add_argument('--tail_classes', nargs='+', default=None, help='A list of strings')
+    parser.add_argument('--tail_classes', nargs='+', default=['cable', 'capsule', 'hazelnut', 'screw', 'tile', 'toothbrush', 'bottle', 'zipper', 'pill'], help='A list of strings') # mvtec tk4 seed 1
+
+
     return parser.parse_args()
 
 _DATA_CONFIG_ROOT = './data_configs'
@@ -69,6 +74,7 @@ def make_data_step(
     tail_k: int = 4,
     tail_class_ratio: float = 0.6,
     seed: int=0,
+    tail_classes: List[str] = None,
 ) -> None:
     set_seed(seed)
     data_config_path = f"{os.path.join(_DATA_CONFIG_ROOT,  os.path.basename(target_dir))}.pkl"
@@ -89,6 +95,7 @@ def make_data_step(
             tail_k=tail_k,
             tail_class_ratio=tail_class_ratio,
             noise_on_tail=noise_on_tail,
+            tail_classes=tail_classes,
         )
 
     _save_data_config(files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes, data_config_path)
@@ -346,10 +353,15 @@ def _make_class_info_step_tail(
     tail_k,
     tail_class_ratio,
     noise_on_tail,
+    tail_classes: List[str] = None,
 ):
     assert not noise_on_tail
     _num_tail_classes = round(len(class_list) * tail_class_ratio)
-    tail_classes = random.sample(class_list, _num_tail_classes)
+    
+    if tail_classes is None:
+        tail_classes = random.sample(class_list, _num_tail_classes)
+
+    assert len(tail_classes) == _num_tail_classes
     head_classes = [cls_name for cls_name in class_list if cls_name not in tail_classes]
 
     num_tail_samples = {}
@@ -554,6 +566,7 @@ def make_data(args):
             tail_k=args.step_tail_k,
             tail_class_ratio=args.step_tail_class_ratio,
             seed=args.seed,
+            tail_classes=args.tail_classes
         )
     elif args.tail_type == "pareto":
 

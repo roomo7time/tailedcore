@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for seed in {0..9}; do
+for seed in {10..19}; do
     python make_tailed_noisy_mvtec.py \
         --source_dir "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec" \
         --tail_type "step" \

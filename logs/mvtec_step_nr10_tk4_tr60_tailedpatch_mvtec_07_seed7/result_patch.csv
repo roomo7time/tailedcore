@@ -1,0 +1,4 @@
+method,num_missing_anomaly_patch,num_missing_normal_patch,auroc
+lof,1336,163346,86.09
+lof-scs_symmin,1110,163120,93.46
+scs_symmin,624,164352,92.7
