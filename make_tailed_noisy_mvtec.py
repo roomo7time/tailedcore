@@ -130,22 +130,7 @@ def get_args():
         # ],
         help="",
     )
-    parser.add_argument("--seed", type=int, default=100, help="")
-
-    # If there is already data info pkl, the below args are ignored
-    # parser.add_argument(
-    #     "--step_tail_classes",
-    #     nargs="+",
-    #     default=MVTEC_STEP_TAIL_CLASSES_HARD,   # FIXME: chagne to bool
-    #     help="A list of strings",
-    # )  # group 1
-    # parser.add_argument(
-    #     "--pareto_class_order",
-    #     nargs="+",
-    #     default=MVTEC_PARETO_CLASS_ORDER_HARD,  # FIXME: change to bool
-    #     help="A list of strings",
-    # )  # mvtec tk4 seed 1
-
+    parser.add_argument("--seed", type=int, default=101, help="")
     parser.add_argument("--easy_tail", type=bool, default=True, help="")
 
     return parser.parse_args()
@@ -947,9 +932,19 @@ def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
 
 def make_data(args):
 
-    target_dir = f"{args.source_dir}_{args.tail_type}_nr{int(args.noise_ratio*100):02d}"
+    if args.easy_tail:
+        tail_difficulty = 'easy'
+    else:
+        tail_difficulty = 'hard'
+
+    target_dir = f"{args.source_dir}_{args.tail_type}_{tail_difficulty}_nr{int(args.noise_ratio*100):02d}"
 
     if args.tail_type == "step":
+
+        if args.easy_tail:
+            tail_classes = STEP_TAIL_CLASSES_EASY[args.data_name]
+        else:
+            tail_classes = STEP_TAIL_CLASSES_HARD[args.data_name]
 
         target_dir += (
             f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
@@ -958,10 +953,7 @@ def make_data(args):
             target_dir += "_tailnoised"
         target_dir += f"_seed{args.seed}"
 
-        if args.easy_tail:
-            tail_classes = STEP_TAIL_CLASSES_EASY[args.data_name]
-        else:
-            tail_classes = STEP_TAIL_CLASSES_HARD[args.data_name]
+        
 
         make_data_step(
             args.source_dir,
@@ -988,7 +980,7 @@ def make_data(args):
             target_dir,
             noise_on_tail=args.noise_on_tail,
             seed=args.seed,
-            class_order=args.pareto_class_order,
+            class_order=class_order,
         )
     else:
         raise NotImplementedError()
