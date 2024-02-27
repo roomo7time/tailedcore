@@ -13,7 +13,7 @@ model:
 
   coreset_model_name: "tailedsoftpatch"
   tail_th_type: "symmin"
-  tail_data_augment_type: "rot15"
+  tail_data_augment_type: "rot15flip"
   tail_lof: true
 
   greedy_ratio: 0.1
