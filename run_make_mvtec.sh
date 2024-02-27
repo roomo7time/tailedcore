@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for seed in {30..49}; do
+for seed in {400..499}; do
     # python make_tailed_noisy_mvtec.py \
     #     --source_dir "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec" \
     #     --tail_type "step" \
@@ -10,7 +10,7 @@ for seed in {30..49}; do
     python make_tailed_noisy_mvtec.py \
         --source_dir "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec" \
         --tail_type "step" \
-        --step_tail_k 1 \
+        --step_tail_k 4 \
         --seed ${seed}
 
     # python make_tailed_noisy_mvtec.py \

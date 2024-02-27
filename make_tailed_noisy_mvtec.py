@@ -131,7 +131,7 @@ def get_args():
         help="",
     )
     parser.add_argument("--seed", type=int, default=101, help="")
-    parser.add_argument("--easy_tail", type=bool, default=True, help="")
+    parser.add_argument("--easy_tail", action='store_true', help="")   # store_true or store_false
 
     return parser.parse_args()
 
