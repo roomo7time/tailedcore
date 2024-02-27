@@ -46,7 +46,7 @@ def plot_score_masks(
     masks_gt,
     score_masks,
     image_scores,
-    binary_masks,
+    binary_masks=None,
     overlay=True,
 ):
     os.makedirs(save_dir_path, exist_ok=True)
