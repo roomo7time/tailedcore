@@ -11,16 +11,18 @@ def parse_args():
     parser.add_argument(
         "--data_root_path",
         type=str,
-        default="/home/jay/mnt/hdd01/data/image_datasets",
+        # default="/home/jay/mnt/hdd01/data/image_datasets",
+        default = "/home/jay/savespace/database/SYMLINKS/project_tailedcore"
     )
 
     # few-shot setting
     parser.add_argument(
         "--data_sub_path",
         type=str,
-        default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed1",
+        # default="anomaly_detection/symlink_mvtec_step_nr10_k4_seed1",
         # default="anomaly_detection/symlink_mvtec_step_nr10_k1_seed0",
         # default="anomaly_detection/symlink_mvtec_pareto_nr10_seed0",
+        default = "visa/symlink_visa_step_nr10_k4_seed0"
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
     parser.add_argument("--config_name", type=str, default="tailedpatch_mvtec_01")

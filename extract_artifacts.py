@@ -65,8 +65,10 @@ def extract_features(args):
             input_shape,
             backbone,
             config.model.layers_to_extract,
-            embedding_to_extract_from="avgpool",
+            embedding_to_extract_from=config.model.embedding_to_extract_from,
         )
+
+        feature_embedder.eval()
 
         fea_map_shape = feature_embedder.get_feature_map_shape()
 
@@ -98,6 +100,7 @@ def extract_features(args):
             _class_names = _get_class_names_mvtec(_image_paths)
 
             _masks = data["mask"]
+
             _masks, _labels = revise_masks_mvtec(
                 _image_paths, _masks, _labels, transform_mask
             )
@@ -106,25 +109,8 @@ def extract_features(args):
                 _masks, target_size=(fea_map_shape[0], fea_map_shape[1])
             )
 
-            # # FIXME: patchify or not
-            # _resized_masks = torch.round(_resized_masks)
-            # _patchified_masks = _patchify(_resized_masks)
-
-            # _patchified_ceil_masks = torch.ceil(_patchified_masks)
-            # _patchified_round_masks = torch.round(_patchified_masks)
-
-            # _up_resized_masks = _upscale(_resized_masks, _masks.shape[-1])
-            # _up_patchified_ceil_masks = _upscale(_patchified_ceil_masks, _masks.shape[-1])
-            # _up_patchified_round_masks = _upscale(_patchified_round_masks, _masks.shape[-1])
-
-            # _patchified_ceil_masks = _patchified_ceil_masks[:, 0, :, :].to(torch.uint8)
-            # _patchified_round_masks = _patchified_round_masks[:, 0, :, :].to(torch.uint8)
-
-            # _up_resized_masks = _up_resized_masks[:, 0, :, :]
-            # _up_patchified_ceil_masks = _up_patchified_ceil_masks[:, 0, :, :]
-            # _up_patchified_round_masks = _up_patchified_round_masks[:, 0, :, :]
-
             _feas, _gaps = feature_embedder(_images, return_embeddings=True)
+            _masks = _masks.floor()
 
             with torch.no_grad():
                 _reduced_feas = mapper(_feas.to(device)).cpu()
@@ -142,32 +128,6 @@ def extract_features(args):
             class_names += _class_names
             image_paths += _image_paths
 
-            # for i in range(len(_masks)):
-            #     if _masks[i].sum().item() > 0:
-            #         _plot_and_save_tensor(_masks[i], "./_masks.png")
-            #         _plot_and_save_tensor(_resized_masks[i], "./_resized_masks.png")
-            #         _plot_and_save_tensor(_patchified_ceil_masks[i], "./_patchified_ceil_mask.png")
-            #         _plot_and_save_tensor(_patchified_round_masks[i], "./_patchified_round_masks.png")
-            #         _plot_and_save_tensor(_up_resized_masks[i], "./_up_resized_masks.png")
-            #         _plot_and_save_tensor(_up_patchified_ceil_masks[i], "./_up_patchified_ceil_masks.png")
-            #         _plot_and_save_tensor(_up_patchified_round_masks[i], "./_up_patchified_round_masks.png")
-
-            #         _diff_resize = (_up_resized_masks[i] - _masks[i])
-            #         _diff_patchify_ceil = (_up_patchified_ceil_masks[i] - _masks[i])
-            #         _diff_patchify_round = (_up_patchified_round_masks[i] - _masks[i])
-
-            #         _diff_resize = torch.norm(_diff_resize, p=1)
-            #         _diff_patchify_ceil = torch.norm(_diff_patchify_ceil, p=1)
-            #         _diff_patchify_round = torch.norm(_diff_patchify_round, p=1)
-
-            #         # _diff_resize = _diff_resize[_diff_resize<0].sum()
-            #         # _diff_patchify_ceil = _diff_patchify_ceil[_diff_patchify_ceil<0].sum()
-            #         # _diff_patchify_round = _diff_patchify_round[_diff_patchify_round<0].sum()
-
-            #         print(f"_diff_resize: {_diff_resize}")
-            #         print(f"_diff_patchify_ceil: {_diff_patchify_ceil}")
-            #         print(f"_diff_patchify_round: {_diff_patchify_round}")
-
         feas = torch.cat(feas)
         reduced_feas = torch.cat(reduced_feas)
         gaps = torch.cat(gaps)
@@ -175,15 +135,6 @@ def extract_features(args):
         downsized_masks = torch.cat(downsized_masks)
         labels = torch.cat(labels)
         class_sizes = torch.cat(class_sizes)
-
-        # # plotting test
-        # anomaly_idx = torch.where(labels == 1)[0].tolist()[1]
-        # mask = masks[anomaly_idx][0]
-        # downsized_mask = downsized_masks[anomaly_idx][0]
-        # image_path = image_paths[anomaly_idx]
-
-        # _plot_and_save_tensor(mask, './_mask.png')
-        # _plot_and_save_tensor(downsized_mask, './_downsized_mask.png')
 
         print("Saving features...")
         os.makedirs(os.path.dirname(extracted_path), exist_ok=True)
@@ -246,6 +197,7 @@ def revise_masks_mvtec(image_paths, masks, labels, transform_mask):
     for i, image_path in enumerate(image_paths):
         if _is_anomaly_path_mvtec(image_path):
 
+            # FIXME: refactor
             image_file_name_without_ext, ext = os.path.splitext(image_path)
             image_file_name_without_ext = image_file_name_without_ext[-3:]
             mask_file_name = f"{image_file_name_without_ext}_mask{ext}"
@@ -260,8 +212,14 @@ def revise_masks_mvtec(image_paths, masks, labels, transform_mask):
                 },
             )
 
+            # TODO: debug
+            mask_dir = os.path.dirname(mask_path)
+            mask_path_pattern = f"{mask_dir}/*{image_file_name_without_ext}*"
+            mask_path = glob.glob(mask_path_pattern)[0]
+
             mask = PIL.Image.open(mask_path)
             mask = transform_mask(mask)
+            
             masks[i] = mask
             labels[i] = 1
 
@@ -280,11 +238,12 @@ def get_class_sizes_mvtec(image_paths):
 
 def _get_class_size_mvtec(image_path):
 
-    pattern = os.path.join(os.path.dirname(image_path), "*.png")
+    # pattern = os.path.join(os.path.dirname(image_path), "*.png")
+    pattern = os.path.join(os.path.dirname(image_path), "*")
 
-    png_files = glob.glob(pattern)
+    files = glob.glob(pattern)
 
-    return len(png_files)
+    return len(files)
 
 
 def _resize_mask(masks, target_size, binarize=False):
