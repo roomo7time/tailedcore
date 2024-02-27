@@ -171,3 +171,5 @@ artifacts/*
 # !configs/tailedpatch_mvtec_03.yaml
 # !configs/tailedpatch_mvtec_04.yaml
 # !configs/atailedpatch_mvtec_01.yaml
+
+shared_resources/*
