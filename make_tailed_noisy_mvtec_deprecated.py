@@ -119,7 +119,7 @@ def get_args():
         # ],
         help="",
     )
-    parser.add_argument("--seed", type=int, default=101, help="")
+    parser.add_argument("--seed", type=int, default=20, help="")
 
     # If there is already data info pkl, the below args are ignored
     parser.add_argument(
@@ -143,23 +143,53 @@ _DATA_CONFIG_ROOT = "./data_configs"
 
 def _load_data_config(data_config_path):
 
-    data_config = load_dict(data_config_path)
-    tailed_files = data_config["tailed_files"]
-    noisy_files = data_config["noisy_files"]
-    return tailed_files, noisy_files
+    data = load_dict(data_config_path)
+
+    files = data["files"]
+    train_files = data["train_files"]
+    anomaly_files = data["anomaly_files"]
+    num_tail_samples = data["num_tail_samples"]
+    num_noise_samples = data["num_noise_samples"]
+    head_classes = data["head_classes"]
+
+    return (
+        files,
+        train_files,
+        anomaly_files,
+        num_tail_samples,
+        num_noise_samples,
+        head_classes,
+    )
 
 
 def _save_data_config(
-    tailed_files,
-    noisy_files,
+    files,
+    train_files,
+    anomaly_files,
+    num_tail_samples,
+    num_noise_samples,
+    head_classes,
     data_config_path,
 ):
-    data_config = {
-        "tailed_files": tailed_files,
-        "noisy_files": noisy_files
+    data = {
+        "files": files,
+        "train_files": train_files,
+        "anomaly_files": anomaly_files,
+        "num_tail_samples": num_tail_samples,
+        "num_noise_samples": num_noise_samples,
+        "head_classes": head_classes,
     }
 
-    save_dict(data_config, data_config_path)
+    save_dict(data, data_config_path)
+    save_dicts_to_csv(
+        [
+            {
+                "num_tail_samples": num_tail_samples,
+                "num_noise_samples": num_noise_samples,
+            }
+        ],
+        filename=os.path.splitext(data_config_path)[0] + ".csv",
+    )
 
 
 def make_data_step(
@@ -178,18 +208,24 @@ def make_data_step(
     )
 
     if os.path.exists(data_config_path):
-        tailed_files, noisy_files = _load_data_config(data_config_path)
+        (
+            files,
+            train_files,
+            anomaly_files,
+            num_tail_samples,
+            num_noise_samples,
+            head_classes,
+        ) = _load_data_config(data_config_path)
     else:
 
         _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
 
         class_list = _MVTEC_CLASS_LIST
-        src_files, src_train_files, src_anomaly_files = _get_mvtec_base_file_info(source_dir)
-        
+        files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
         num_tail_samples, num_noise_samples, head_classes = _make_class_info_step_tail(
             class_list=class_list,
-            train_files=src_train_files,
-            anomaly_files=src_anomaly_files,
+            train_files=train_files,
+            anomaly_files=anomaly_files,
             noise_ratio=noise_ratio,
             tail_k=tail_k,
             tail_class_ratio=tail_class_ratio,
@@ -197,34 +233,25 @@ def make_data_step(
             tail_classes=tail_classes,
         )
 
-        tailed_files, noisy_files = _select_tailed_noises(
-            files=src_files,
-            train_files=src_train_files,
-            anomaly_files=src_anomaly_files,
-            num_tail_samples=num_tail_samples,
-            num_noise_samples=num_noise_samples,
-            head_classes=head_classes,
-        )
-
         _save_data_config(
-            tailed_files=tailed_files,
-            noisy_files=noisy_files,
-            data_config_path=data_config_path
+            files,  # dict: class -> file paths
+            train_files,    # dict: class -> file paths (only train)
+            anomaly_files,  # dict: class -> file paths (only anomaly)
+            num_tail_samples,   # dict: class -> num samples of tail class per class
+            num_noise_samples,  # dict: class -> num noisy samples per class
+            head_classes,       # list of head class names
+            data_config_path,
         )
 
-    # debug
-    # _data_config = make_config_pkl_from_data(target_dir)
-    # _tailed_files = _data_config['tailed_files']
-    # _noisy_files = _data_config['noisy_files']
-
-    # set(_tailed_files) == set(tailed_files)
-    # set(_noisy_files) == set(noisy_files)
-    
     _make_data(
         source_dir=source_dir,
         target_dir=target_dir,
-        tailed_files=tailed_files,
-        noisy_files=noisy_files,
+        files=files,
+        train_files=train_files,
+        anomaly_files=anomaly_files,
+        num_tail_samples=num_tail_samples,
+        num_noise_samples=num_noise_samples,
+        head_classes=head_classes,
     )
 
 
@@ -243,52 +270,71 @@ def make_data_pareto(
     )
 
     if os.path.exists(data_config_path):
-        tailed_files, noisy_files = _load_data_config(data_config_path)
+        (
+            files,
+            train_files,
+            anomaly_files,
+            num_tail_samples,
+            num_noise_samples,
+            head_classes,
+        ) = _load_data_config(data_config_path)
     else:
 
         _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
 
         class_list = _MVTEC_CLASS_LIST
-        src_files, src_train_files, src_anomaly_files = _get_mvtec_base_file_info(source_dir)
+        files, train_files, anomaly_files = _get_mvtec_base_file_info(source_dir)
         num_tail_samples, num_noise_samples, head_classes = (
             _make_class_info_pareto_tail(
                 class_list,
-                src_train_files,
+                train_files,
                 noise_ratio,
                 noise_on_tail=noise_on_tail,
                 class_order=class_order,
             )
         )
 
-        tailed_files, noisy_files = _select_tailed_noises(
-            files=src_files,
-            train_files=src_train_files,
-            anomaly_files=src_anomaly_files,
-            num_tail_samples=num_tail_samples,
-            num_noise_samples=num_noise_samples,
-            head_classes=head_classes,
-        )
-
-        _save_data_config(
-            tailed_files=tailed_files,
-            noisy_files=noisy_files,
-            data_config_path=data_config_path
-        )
+    _save_data_config(
+        files,
+        train_files,
+        anomaly_files,
+        num_tail_samples,
+        num_noise_samples,
+        head_classes,
+        data_config_path,
+    )
 
     _make_data(
         source_dir=source_dir,
         target_dir=target_dir,
-        tailed_files=tailed_files,
-        noisy_files=noisy_files,
+        files=files,
+        train_files=train_files,
+        anomaly_files=anomaly_files,
+        num_tail_samples=num_tail_samples,
+        num_noise_samples=num_noise_samples,
+        head_classes=head_classes,
     )
 
 
 def _make_data(
     source_dir,
     target_dir,
-    tailed_files,
-    noisy_files,
+    files,
+    train_files,
+    anomaly_files,
+    num_tail_samples,
+    num_noise_samples,
+    head_classes,
 ) -> None:
+
+    tailed_files, noisy_files = _select_tailed_noises(
+        files=files,
+        train_files=train_files,
+        anomaly_files=anomaly_files,
+        num_tail_samples=num_tail_samples,
+        num_noise_samples=num_noise_samples,
+        head_classes=head_classes,
+    )
 
     file_mapper_tail = _make_file_mapper(source_dir, target_dir, file_list=tailed_files)
     file_mapper_noise = _make_file_mapper(
@@ -782,6 +828,24 @@ def make_data(args):
 def list_directories(path):
     return [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
 
+# def list_end_branch_files(pattern):
+#     # This pattern will match all files and directories at any depth in the given path
+#     # Use glob.glob with recursive=True to search through all subdirectories
+#     all_paths = glob.glob(pattern, recursive=True)
+#     # Filter out directories, leaving only files
+#     only_files = [p for p in all_paths if os.path.isfile(p)]
+#     return only_files
+
+# def list_end_branch_files(base_path, extensions = ['.png', '.jpg', '.jpeg', '.bmp']):
+#     # Use a pattern that matches all files under the base_path, recursively
+#     pattern = base_path + "/**/*"
+#     all_paths = glob.glob(pattern, recursive=True)
+    
+#     # Filter out directories and then filter for specific extensions, ignoring case
+#     only_files_with_extensions = [p for p in all_paths if os.path.isfile(p) and os.path.splitext(p)[1].lower() in extensions]
+    
+#     return only_files_with_extensions
+
 def list_end_branch_files(base_path, extensions = ['.png', '.jpg', '.jpeg', '.bmp']):
     # Construct a pattern for recursive search
     pattern = os.path.join(base_path, '**', '*')
@@ -842,31 +906,6 @@ def count_files_with_numbers_and_chars(file_paths):
     
     return count
 
-def get_files_with_numbers_and_chars(file_paths):
-    """
-    Retrieves a list of file paths where the file name
-    (ignoring the extension) includes not only numbers but also English characters.
-
-    Parameters:
-    - file_paths (list): A list of strings representing file paths.
-
-    Returns:
-    - list: A list of file paths matching the criteria.
-    """
-    # Regex pattern to match file names with at least one number and one English letter
-    pattern = re.compile(r'(?=.*\d)(?=.*[a-zA-Z])')
-    
-    matching_files = []
-    for path in file_paths:
-        # Extract the base file name without the extension
-        file_name = os.path.splitext(os.path.basename(path))[0]
-        
-        # If the file name matches the pattern, add it to the list
-        if pattern.search(file_name):
-            matching_files.append(path)
-    
-    return matching_files
-
 def get_relative_paths(base_path, file_paths):
     """
     Converts a list of absolute file paths to relative paths given a base path.
@@ -881,44 +920,8 @@ def get_relative_paths(base_path, file_paths):
     relative_paths = [os.path.relpath(path, base_path) for path in file_paths]
     return relative_paths
 
-
-def train_anomaly_to_test(rel_file_paths):
-    return [_train_anomaly_to_test(rel_file_path) for rel_file_path in rel_file_paths]
-
-def _train_anomaly_to_test(rel_file_path):
-    """
-    Transforms the file path from formats like 'wood/train/good/scratch_016.png' or
-    'wood/train/good/abc_def_ghi_000.png' to 'wood/test/scratch/016.png' or
-    'wood/test/abc_def_ghi/000.png', correctly separating the character and numeric parts.
-
-    Parameters:
-    - original_path (str): Original file path.
-
-    Returns:
-    - str: Transformed file path.
-    """
-    # Split the path into its components
-    path_parts = rel_file_path.split('/')
-    
-    # Extract the file name and extension
-    base_name, extension = os.path.splitext(path_parts[-1])
-    
-    # Use regex to separate the numeric part from the rest of the file name
-    match = re.search(r'([^_]+)_?(\d+)$', base_name)
-    if not match:
-        raise ValueError("File name does not match expected pattern")
-    
-    # Everything before the last numeric part is considered as character part
-    char_part = base_name[:match.start(2)-1]  # Exclude the underscore before the numeric part
-    num_part = match.group(2)
-    
-    # Construct the new path
-    new_path = os.path.join(path_parts[0], 'test', char_part, f'{num_part}{extension}')
-    
-    return new_path
-
 # FIXME: hard-coded; revision is required
-def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
+def make_config_pkl_from_data(data_dir, data_name='mvtec'):
 
     if data_name == 'mvtec':
         num_train_samples = NUM_TRAIN_SAMPLES_MVTEC
@@ -926,6 +929,14 @@ def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
         raise NotImplementedError()
 
     class_names = list_directories(data_dir)
+
+    # files,  # dict: class -> file paths
+    # train_files,    # dict: class -> file paths (only train)      # TODO: check does it include anomaly?
+    # anomaly_files,  # dict: class -> file paths (only test anomaly)    # TODO: check; does it include ground_truths?
+    # num_tail_samples,   # dict: class -> num samples of tail class per class
+    # num_noise_samples,  # dict: class -> num noisy samples per class
+    # head_classes,       # list of head class names
+    # data_config_path,
 
     files = {}
     train_files = {}
@@ -954,22 +965,14 @@ def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
     
     head_classes = [class_name for class_name in class_names if class_name not in num_tail_samples]
 
-    
-    _all_files = get_relative_paths(data_dir, list_end_branch_files(data_dir))
-    _train_files = get_relative_paths(data_dir, list_end_branch_files(os.path.join(data_dir, '*', 'train', 'good')))
-
-    _anomaly_train_files = get_files_with_numbers_and_chars(_train_files)
-
-    noisy_files = train_anomaly_to_test(_anomaly_train_files)
-    tailed_files = subtract_lists(_all_files, _anomaly_train_files)
-    
     data_config = {
-        "tailed_files":tailed_files,
-        "noisy_files": noisy_files,
+        "files": files,
+        "train_files": train_files,
+        "anomaly_files": anomaly_files,
+        "num_tail_samples": num_tail_samples,
+        "num_noise_samples": num_noise_samples,
+        "head_classes": head_classes
     }
-
-    if save_pkl:
-        save_dict(data_config, f"{os.path.basename(data_dir)}.pkl")
 
     return data_config
     
@@ -977,6 +980,8 @@ def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
 
 if __name__ == "__main__":
 
+    # _data_dir = "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec_step_nr10_tk4_tr60_seed4"
+    # make_config_pkl_from_data(_data_dir)
 
     args = get_args()
     make_data(args)
