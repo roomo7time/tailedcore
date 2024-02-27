@@ -204,19 +204,15 @@ def make_data_step(
             head_classes=head_classes,
         )
 
+        if os.path.exists(target_dir):
+            data_config = make_config_pkl_from_data(target_dir)
+            tailed_files, noisy_files = data_config["tailed_files"], data_config["noisy_files"]
+
         _save_data_config(
             tailed_files=tailed_files,
             noisy_files=noisy_files,
             data_config_path=data_config_path
         )
-
-    # debug
-    # _data_config = make_config_pkl_from_data(target_dir)
-    # _tailed_files = _data_config['tailed_files']
-    # _noisy_files = _data_config['noisy_files']
-
-    # set(_tailed_files) == set(tailed_files)
-    # set(_noisy_files) == set(noisy_files)
     
     _make_data(
         source_dir=source_dir,

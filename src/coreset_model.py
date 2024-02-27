@@ -1176,12 +1176,12 @@ class TailedSoftPatch(BaseCore):
         return tail_features
     
     def _get_tail_augmented_features(self, trainloader: DataLoader, tail_indices):
-        if self.tail_data_augment_type == "rot15":
-            return self._get_tail_augmented_features_rot15(trainloader, tail_indices)
+        if self.tail_data_augment_type == "rot15flip":
+            return self._get_tail_augmented_features_rot15flip(trainloader, tail_indices)
         else:
             raise NotImplementedError()
 
-    def _get_tail_augmented_features_rot15(self, trainloader: DataLoader, tail_indices: torch.Tensor):
+    def _get_tail_augmented_features_rot15flip(self, trainloader: DataLoader, tail_indices: torch.Tensor):
         self.feature_embedder.eval()
 
         def _revise_trainloader(trainloader):   # hard-coded
