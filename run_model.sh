@@ -8,9 +8,9 @@ for seed in {10..29}; do
 
     # Define specific data names with their corresponding seeds
     DATA_NAMES=(
-        "mvtec_step_nr10_tk1_tr60_seed${seed}"
-        "mvtec_step_nr10_tk4_tr60_seed${seed}"
-        "mvtec_pareto_nr10_seed0"
+        "mvtec_step_nr10_tk1_tr70_seed${seed}"
+        "mvtec_step_nr10_tk4_tr70_seed${seed}"
+        "mvtec_pareto_nr10_seed${seed}"
     )
 
     # Process each data name with each config name

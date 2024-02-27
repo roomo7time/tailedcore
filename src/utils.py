@@ -337,7 +337,7 @@ def get_folder_names(folder_root_path):
 
     # Check if the provided path is indeed a directory
     if not os.path.isdir(folder_root_path):
-        return "The provided path is not a directory."
+        raise ValueError("The provided path is not a directory.")
 
     # Iterate over the entries in the given directory
     for entry in os.listdir(folder_root_path):
