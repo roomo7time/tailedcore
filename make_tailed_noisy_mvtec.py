@@ -19,65 +19,76 @@ from src.utils import (
 
 import argparse
 
+STEP_TAIL_CLASSES_HARD = {
+    "mvtec": [
+        "bottle",
+        "hazelnut",
+        "leather",
+        "tile",
+        "toothbrush",
+        "grid",
+        "capsule",
+        "pill",
+        "screw",
+        "zipper",
+    ]
+}
 
-MVTEC_STEP_TAIL_CLASSES_HARD = [
-    "bottle",
-    "hazelnut",
-    "leather",
-    "tile",
-    "toothbrush",
-    "grid",
-    "capsule",
-    "pill",
-    "screw",
-    "zipper",
-]
-MVTEC_STEP_TAIL_CLASSES_EASY = [
-    "bottle",
-    "hazelnut",
-    "leather",
-    "tile",
-    "toothbrush",
-    "cable",
-    "metal_nut",
-    "transistor",
-    "carpet",
-    "wood",
-]
-MVTEC_PARETO_CLASS_ORDER_HARD = [
-    "carpet",
-    "wood",
-    "cable",
-    "metal_nut",
-    "transistor",
-    "bottle",
-    "hazelnut",
-    "leather",
-    "tile",
-    "toothbrush",
-    "grid",
-    "capsule",
-    "pill",
-    "screw",
-    "zipper",
-]
-MVTEC_PARETO_CLASS_ORDER_EASY = [
-    "screw",
-    "pill",
-    "grid",
-    "zipper",
-    "capsule",
-    "bottle",
-    "hazelnut",
-    "leather",
-    "tile",
-    "toothbrush",
-    "carpet",
-    "wood",
-    "cable",
-    "metal_nut",
-    "transistor",
-]
+STEP_TAIL_CLASSES_EASY = {
+    "mvtec": [
+        "bottle",
+        "hazelnut",
+        "leather",
+        "tile",
+        "toothbrush",
+        "cable",
+        "metal_nut",
+        "transistor",
+        "carpet",
+        "wood",
+    ]
+}
+
+
+PARETO_CLASS_ORDER_HARD = {
+    "mvtec": [
+        "carpet",
+        "wood",
+        "cable",
+        "metal_nut",
+        "transistor",
+        "bottle",
+        "hazelnut",
+        "leather",
+        "tile",
+        "toothbrush",
+        "grid",
+        "capsule",
+        "pill",
+        "screw",
+        "zipper",
+    ]
+}
+
+PARETO_CLASS_ORDER_EASY = {
+    "mvtec": [
+        "screw",
+        "pill",
+        "grid",
+        "zipper",
+        "capsule",
+        "bottle",
+        "hazelnut",
+        "leather",
+        "tile",
+        "toothbrush",
+        "carpet",
+        "wood",
+        "cable",
+        "metal_nut",
+        "transistor",
+    ]
+}
 
 NUM_TRAIN_SAMPLES_MVTEC = {
     "bottle": 209,
@@ -105,7 +116,7 @@ def get_args():
     parser.add_argument(
         "--tail_type", type=str, choices=["step", "pareto"], default="step", help=""
     )
-    parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
+    parser.add_argument("--step_tail_k", type=int, default=1, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.7, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
     parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
@@ -119,21 +130,23 @@ def get_args():
         # ],
         help="",
     )
-    parser.add_argument("--seed", type=int, default=101, help="")
+    parser.add_argument("--seed", type=int, default=100, help="")
 
     # If there is already data info pkl, the below args are ignored
-    parser.add_argument(
-        "--step_tail_classes",
-        nargs="+",
-        default=MVTEC_STEP_TAIL_CLASSES_HARD,   # FIXME: chagne to bool
-        help="A list of strings",
-    )  # group 1
-    parser.add_argument(
-        "--pareto_class_order",
-        nargs="+",
-        default=MVTEC_PARETO_CLASS_ORDER_HARD,  # FIXME: change to bool
-        help="A list of strings",
-    )  # mvtec tk4 seed 1
+    # parser.add_argument(
+    #     "--step_tail_classes",
+    #     nargs="+",
+    #     default=MVTEC_STEP_TAIL_CLASSES_HARD,   # FIXME: chagne to bool
+    #     help="A list of strings",
+    # )  # group 1
+    # parser.add_argument(
+    #     "--pareto_class_order",
+    #     nargs="+",
+    #     default=MVTEC_PARETO_CLASS_ORDER_HARD,  # FIXME: change to bool
+    #     help="A list of strings",
+    # )  # mvtec tk4 seed 1
+
+    parser.add_argument("--easy_tail", type=bool, default=True, help="")
 
     return parser.parse_args()
 
@@ -733,50 +746,7 @@ def get_subdirectories(directory_path):
     return subdirectories
 
 
-def make_data(args):
 
-    target_dir = f"{args.source_dir}_{args.tail_type}_nr{int(args.noise_ratio*100):02d}"
-
-    if args.tail_type == "step":
-
-        target_dir += (
-            f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
-        )
-        if args.noise_on_tail:
-            target_dir += "_tailnoised"
-        target_dir += f"_seed{args.seed}"
-
-        make_data_step(
-            args.source_dir,
-            target_dir,
-            noise_on_tail=args.noise_on_tail,
-            tail_k=args.step_tail_k,
-            tail_class_ratio=args.step_tail_class_ratio,
-            seed=args.seed,
-            tail_classes=args.step_tail_classes,
-        )
-    elif args.tail_type == "pareto":
-
-        if args.noise_on_tail:
-            target_dir += "_tailnoised"
-        target_dir += f"_seed{args.seed}"
-
-        make_data_pareto(
-            args.source_dir,
-            target_dir,
-            noise_on_tail=args.noise_on_tail,
-            seed=args.seed,
-            class_order=args.pareto_class_order,
-        )
-    else:
-        raise NotImplementedError()
-
-    print(f"target_dir: {target_dir}")
-
-    # verification
-    compare_directories(
-        args.source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
-    )
 
 
 def list_directories(path):
@@ -973,6 +943,62 @@ def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
 
     return data_config
     
+
+
+def make_data(args):
+
+    target_dir = f"{args.source_dir}_{args.tail_type}_nr{int(args.noise_ratio*100):02d}"
+
+    if args.tail_type == "step":
+
+        target_dir += (
+            f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
+        )
+        if args.noise_on_tail:
+            target_dir += "_tailnoised"
+        target_dir += f"_seed{args.seed}"
+
+        if args.easy_tail:
+            tail_classes = STEP_TAIL_CLASSES_EASY[args.data_name]
+        else:
+            tail_classes = STEP_TAIL_CLASSES_HARD[args.data_name]
+
+        make_data_step(
+            args.source_dir,
+            target_dir,
+            noise_on_tail=args.noise_on_tail,
+            tail_k=args.step_tail_k,
+            tail_class_ratio=args.step_tail_class_ratio,
+            seed=args.seed,
+            tail_classes=tail_classes,
+        )
+    elif args.tail_type == "pareto":
+
+        if args.noise_on_tail:
+            target_dir += "_tailnoised"
+        target_dir += f"_seed{args.seed}"
+
+        if args.easy_tail:
+            class_order = PARETO_CLASS_ORDER_EASY[args.data_name]
+        else:
+            class_order = PARETO_CLASS_ORDER_HARD[args.data_name]
+
+        make_data_pareto(
+            args.source_dir,
+            target_dir,
+            noise_on_tail=args.noise_on_tail,
+            seed=args.seed,
+            class_order=args.pareto_class_order,
+        )
+    else:
+        raise NotImplementedError()
+
+    print(f"target_dir: {target_dir}")
+
+    # verification
+    compare_directories(
+        args.source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
+    )
 
 
 if __name__ == "__main__":
