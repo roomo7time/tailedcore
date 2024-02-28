@@ -2,6 +2,7 @@ import os
 import re
 import random
 import glob
+import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import pareto
@@ -116,7 +117,7 @@ def get_args():
     parser.add_argument(
         "--tail_type", type=str, choices=["step", "pareto"], default="step", help=""
     )
-    parser.add_argument("--step_tail_k", type=int, default=1, choices=[1, 4], help="")
+    parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.7, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
     parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
@@ -130,7 +131,7 @@ def get_args():
         # ],
         help="",
     )
-    parser.add_argument("--seed", type=int, default=101, help="")
+    parser.add_argument("--seed", type=int, default=500, help="")
     parser.add_argument("--easy_tail", action='store_true', help="")   # store_true or store_false
 
     return parser.parse_args()
@@ -645,6 +646,11 @@ def list_files_to_remove(file_list, k):
 
     return files_to_remove
 
+def _create_symlink(source_path, target_path):
+    resolved_source_path = os.path.realpath(source_path)
+
+    if not os.path.exists(target_path):
+        os.symlink(resolved_source_path, target_path)
 
 def create_symlinks(file_mapper):
     """
@@ -656,13 +662,8 @@ def create_symlinks(file_mapper):
         # Ensure the directory of the target path exists
         target_dir = os.path.dirname(target)
         os.makedirs(target_dir, exist_ok=True)
-
-        # Create a symlink from the source to the target
-        try:
-            os.symlink(source, target)
-        except:
-            pass
-        # print(f"Symlink created: {source} -> {target}")
+        
+        _create_symlink(source, target)
 
 
 def compare_directories(
