@@ -3,9 +3,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.pyplot import cm
 import os
+import torch.nn.functional as F
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.neighbors import KernelDensity
 
 import plot_utils
-from src.sampler import LOFSampler, TailSampler
+from src.sampler import LOFSampler, TailSampler, GreedyCoresetSampler
+from src.utils import set_seed
 
 
 def get_extracted_artifacts():
@@ -30,12 +34,13 @@ def _get_extracted_artifacts_mvtec_step_nr10_tk4_seed0_wrn50():
 
 def plots():
 
+    set_seed(0)
     extracted, artifact_name = get_extracted_artifacts()
 
     feas = extracted["feas"]
-    gaps = extracted["gaps"]
+    embeddings = extracted["gaps"]
     rmasks = extracted["downsized_masks"]
-
+    class_names = extracted["class_names"]
     class_sizes = extracted["class_sizes"]
 
     b, fea_dim, h, w = feas.size()
@@ -46,7 +51,7 @@ def plots():
     is_many_shot_gt = (patch_class_sizes >= 100).long()
 
     is_anomaly_gt = torch.round(rmasks).reshape((-1,)).long()
-    labels = is_few_shot_gt + is_medium_shot_gt * 2 + is_many_shot_gt * 3
+    shot_labels = is_few_shot_gt + is_medium_shot_gt * 2 + is_many_shot_gt * 3
     patch_features = (
         feas.reshape(b, fea_dim, -1).permute(0, 2, 1).reshape((-1, fea_dim))
     )
@@ -54,7 +59,7 @@ def plots():
     lof_sampler = LOFSampler()
     tail_sampler = TailSampler()
 
-    _, tail_indices = tail_sampler.run(gaps)
+    _, tail_indices, cizes = tail_sampler.run(embeddings, return_class_sizes=True)
 
     outlier_scores_path = f"./shared_resources/{artifact_name}_outlier_scores.pt"
 
@@ -66,108 +71,120 @@ def plots():
         )
         torch.save(outlier_scores, outlier_scores_path)
 
-    labels[is_anomaly_gt.bool()] = 0
+    shot_labels[is_anomaly_gt.bool()] = 0
 
-    index_map = torch.arange(len(outlier_scores)).reshape(-1, h*w)
-    ones = torch.ones((len(gaps), )).bool()
-    ones[tail_indices] = False
-    indices_head = index_map[ones].reshape((-1))
+    # extra scores
+    kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(embeddings)
+    log_densities = kde.score_samples(embeddings)
+    kdenlds = -log_densities
 
-    # outlier_scores_few_shot = outlier_scores[shot_labels == 1]
-    # outlier_scores_medium_shot = outlier_scores[shot_labels == 2]
-    # outlier_scores_many_shot = outlier_scores[shot_labels == 3]
+    clf = LocalOutlierFactor(n_neighbors=6, metric="l2")
+    clf.fit(embeddings)
+    lofs = -clf.negative_outlier_factor_
 
-    # class_sizes_few_shot = patch_class_sizes[shot_labels == 1]
-    # class_sizes_medium_shot = patch_class_sizes[shot_labels == 2]
-    # class_sizes_many_shot = patch_class_sizes[shot_labels == 3]
+    cizes = cizes[:, None].repeat(1, h * w).reshape((-1,)).numpy()
+    lofs = torch.from_numpy(lofs[:, None]).repeat(1, h * w).reshape((-1,)).numpy()
+    kdenlds = torch.from_numpy(kdenlds[:, None]).repeat(1, h * w).reshape((-1,)).numpy()
 
-    # mean_outlier_score_few_shot = outlier_scores_few_shot.mean().item()
-    # mean_outlier_score_medium_shot = outlier_scores_medium_shot.mean().item()
-    # mean_outlier_score_many_shot = outlier_scores_many_shot.mean().item()
-
-    # mean_class_size_few_shot = class_sizes_few_shot.mean().item()
-    # mean_class_size_medium_shot = class_sizes_medium_shot.mean().item()
-    # mean_class_size_many_shot = class_sizes_many_shot.mean().item()
-
-    # means = np.array(
-    #     [
-    #         [mean_outlier_score_few_shot, mean_class_size_few_shot],
-    #         [mean_outlier_score_medium_shot, mean_class_size_medium_shot],
-    #         [mean_outlier_score_many_shot, mean_class_size_many_shot],
-    #     ]
+    # _plot_removal_shot_ratio(outlier_scores, shot_labels)
+    # _plot_patch_vs_density_embedding(
+    #     outlier_scores,
+    #     (h, w),
+    #     shot_labels,
+    #     embeddings,
     # )
-
-    """
-    score
-    """    
-    def calculate_label_counts(scores, labels, p=0.85, num_labels=4):
-        
-        thresh = np.quantile(scores, p)
-
-        labels_sampled = labels[scores < thresh]
-
-        label_counts =  [np.sum(labels_sampled == i) for i in range(num_labels)]
-        
-        return label_counts
-    
-    outlier_scores_baseline = outlier_scores.numpy()
-    labels_baseline = labels.numpy()
-
-    coreset_ratio = 0.1
-    
-    labels_counts_source = calculate_label_counts(outlier_scores_baseline, labels_baseline, p=1.0)
-    label_counts_baseline = calculate_label_counts(outlier_scores_baseline, labels_baseline)
-    label_counts_ours = list(label_counts_baseline)
-    label_counts_ours[1] += h*w*len(tail_indices)
-
-    # label_counts_baseline = np.log(label_counts_baseline)
-    # label_counts_ours = np.log(label_counts_ours)
-
-    """
-    plots
-    """
-    label_names = ["Few-shot", "Medium-shot", "Many-shot"]
-
-    # plot_utils.plot_bars(
-    #     list1=label_counts_baseline[1:],
-    #     list2=label_counts_ours[1:],
-    #     list1_name="baseline",
-    #     list2_name="ours",
-    #     x_ticks=label_names,
-    #     y_label="Ratio of lowest density",
-    #     filename='./test.jpg',
-    #     show=True
-    # )
-
-    plot_utils.plot_bars_three_lists(
-        list1=labels_counts_source[1:],
-        list2=label_counts_baseline[1:],
-        list3=label_counts_ours[1:],
-        list1_name="before noise discrimination",
-        list2_name="baseline",
-        list3_name="ours",
-        x_ticks=label_names,
-        y_label="Ratio of lowest density",
-        filename='./test.jpg',
-        show=True
+    _plot_tpr_vs_fpr(
+        outlier_scores.numpy(), lofs, kdenlds, -cizes, (shot_labels == 1).long()
     )
 
 
-vivid_colors = [
-    "#FF6B6B",  # Vivid Red 0
-    "#FFD93D",  # Vivid Yellow 1
-    "#6BCB77",  # Vivid Green 2
-    "#4D96FF",  # Vivid Blue 3
-    "#9D4EDD",  # Vivid Purple 4
-    "#FF70A6",  # Vivid Pink 5
-    "#FF9F45",  # Vivid Orange 6
-    "#32E0C4",  # Vivid Teal 7
-    "#F06595",  # Vivid Magenta
-    "#A9DEF9",  # Soft Blue
-    "#E4C1F9",  # Soft Purple
-    "#FEC8D8",  # Soft Pink
-    "#FAFCC2",  # Soft Yellow
-]
+def _plot_tpr_vs_fpr(
+    patch_lofs,
+    lofs,
+    neg_log_densities,
+    cizes,
+    few_shot_labels,
+):
+    plot_utils.plot_roc_curves(
+        [patch_lofs, lofs, neg_log_densities, cizes],
+        true_labels=few_shot_labels,
+        score_names=["LOF-patch", "LOF", "KDE", "Ours"],
+    )
+
+
+def _plot_patch_vs_density_embedding(
+    feature_outlier_scores,
+    feature_map_shape,
+    shot_labels,
+    embeddings,
+):
+    h, w = feature_map_shape
+
+    embeddings = F.normalize(embeddings, dim=-1).numpy()
+
+    kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(embeddings)
+    log_density = kde.score_samples(embeddings)
+
+    embedding_outlier_scores = -log_density
+    # embedding_outlier_scores = - np.exp(log_density)
+
+    # clf = LocalOutlierFactor(n_neighbors=6, metric="l2")
+    # clf.fit(embeddings)
+    # embedding_outlier_scores = -clf.negative_outlier_factor_
+
+    n = len(feature_outlier_scores)
+
+    embedding_outlier_scores = (
+        torch.from_numpy(embedding_outlier_scores)[:, None]
+        .repeat(1, h * w)
+        .reshape((-1,))
+    )
+
+    # random_indices = np.random.choice(n, size=int(n*0.01), replace=False)
+    # feature_outlier_scores = feature_outlier_scores[random_indices]
+    # embedding_outlier_scores = embedding_outlier_scores[random_indices]
+
+    plot_utils.plot_and_save_correlation_graph(
+        scores1=embedding_outlier_scores.numpy(),
+        scores2=feature_outlier_scores.numpy(),
+        labels=shot_labels,
+        label_names=["Anomaly", "Few-shot", "Medium-shot", "Many-shot"],
+        score1_name="Negative log density of embedding",
+        score2_name="Patch outlier score",
+        ylim=(0.9, 2.5),
+    )
+
+
+def _plot_removal_shot_ratio(outlier_scores, labels):
+    def calculate_label_counts(scores, labels, p=0.85, num_labels=4):
+
+        thresh = np.quantile(scores, p)
+
+        labels_sampled = labels[scores > thresh]
+
+        label_counts = [np.sum(labels_sampled == i) for i in range(num_labels)]
+
+        return label_counts
+
+    labels_counts = calculate_label_counts(
+        outlier_scores.numpy(), labels.numpy(), p=0.85
+    )
+
+    removal_ratio = [[]] * len(labels_counts)
+    for i in range(len(labels_counts)):
+        removal_ratio[i] = labels_counts[i] / (labels == i).sum().item()
+
+    label_names = ["Anomaly", "Few-shot", "Medium-shot", "Many-shot"]
+
+    plot_utils.plot_bars(
+        data_lists=[removal_ratio],
+        list_names=["none"],
+        x_ticks=label_names,
+        y_label="Ratio in lowest density patches",
+        filename="./test.jpg",
+        show=False,
+        legend=False,
+    )
 
 
 def plot_top_outlier_scores_ratio(outlier_scores, labels):
@@ -193,9 +210,8 @@ def plot_top_outlier_scores_ratio(outlier_scores, labels):
         list2_name="ours",
         x_ticks=label_names,
         y_label="Ratio of lowest density",
-        filename='./test.jpg'
+        filename="./test.jpg",
     )
-
 
 
 def plot_label_vs_outlier_score(outlier_scores, labels, filename="plot.png"):

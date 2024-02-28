@@ -111,7 +111,7 @@ def get_coreset_model(
             save_dir_path=save_dir_path,
             brute=brute,
             tail_th_type=model_config.tail_th_type,
-            data_augment_tail=model_config.data_augment_tail,
+            tail_data_augment_type=model_config.tail_data_augment_type,
             tail_lof=model_config.tail_lof,
         )
     elif model_config.coreset_model_name == 'tailedsoftpatch':
@@ -738,7 +738,7 @@ class AATailedPatch(BaseCore):
         save_dir_path=None,
         brute=True,
         tail_th_type: str = 'symmin',   # symmin, indep
-        data_augment_tail: bool = False,
+        tail_data_augment_type: str = 'rot15flip',  # None, 'rot15flip', 'rot30flip'
         tail_lof: bool = False,
     ):
         super(AATailedPatch, self).__init__()
@@ -778,7 +778,7 @@ class AATailedPatch(BaseCore):
             self.coreset_path = None
         
         self.tail_th_type = tail_th_type
-        self.data_augment_tail = data_augment_tail
+        self.tail_data_augment_type = tail_data_augment_type
 
 
     def fit(self, trainloader: DataLoader, set_predictor=True):
@@ -903,6 +903,17 @@ class AATailedPatch(BaseCore):
         return coreset_tail_features
 
     def _get_tail_augmented_features(self, trainloader: DataLoader, tail_indices: torch.Tensor):
+
+        if self.tail_data_augment_type is None:
+            return None
+        elif self.tail_data_augment_type == 'rot15flip':
+            return self._get_tail_augmented_features_rotflip(trainloader, tail_indices, rot_degree=15, flip=True)
+        elif self.tail_data_augment_type == 'rot30flip':
+            return self._get_tail_augmented_features_rotflip(trainloader, tail_indices, rot_degree=30, flip=True)
+        else:
+            raise NotImplementedError()
+
+    def _get_tail_augmented_features_rotflip(self, trainloader: DataLoader, tail_indices: torch.Tensor, rot_degree=15, flip=False):
         self.feature_embedder.eval()
 
         def _revise_trainloader(trainloader):   # hard-coded
@@ -925,6 +936,11 @@ class AATailedPatch(BaseCore):
         features = []
         tail_indices_set = set(tail_indices.tolist())  # Convert to a set for faster lookup
 
+        if flip:
+            flip_range = [0,1]
+        else:
+            flip_range = [0]
+
         with tqdm(trainloader, desc="Computing augmented features...", leave=False) as data_iterator:
             for batch_idx, data in enumerate(data_iterator):
                 # Calculate the indices for the current batch
@@ -941,8 +957,8 @@ class AATailedPatch(BaseCore):
                 # Select only the images corresponding to relevant indices
                 relevant_images = images[[i - batch_idx * batch_size for i in relevant_indices]]
 
-                for angle in range(0, 360, 15):
-                    for flip in [0, 1]:
+                for angle in range(0, 360, rot_degree):
+                    for flip in flip_range:
                         if (angle, flip) == (0, 0):
                             continue
 

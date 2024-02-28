@@ -115,10 +115,10 @@ def get_args():
         "--data_name", type=str, choices=["mvtec", "visa"], default="mvtec", help=""
     )
     parser.add_argument(
-        "--tail_type", type=str, choices=["step", "pareto"], default="step", help=""
+        "--tail_type", type=str, choices=["step", "pareto"], default="pareto", help=""
     )
     parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
-    parser.add_argument("--step_tail_class_ratio", type=float, default=0.7, help="")
+    parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
     parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
     parser.add_argument(
@@ -131,8 +131,8 @@ def get_args():
         # ],
         help="",
     )
-    parser.add_argument("--seed", type=int, default=500, help="")
-    parser.add_argument("--easy_tail", action='store_true', help="")   # store_true or store_false
+    parser.add_argument("--seed", type=int, default=505, help="")
+    parser.add_argument("--tail_level", type=str, default='random', choices=["random", "easy", "hard"], help="")
 
     return parser.parse_args()
 
@@ -214,6 +214,8 @@ def make_data_step(
             noisy_files=noisy_files,
             data_config_path=data_config_path
         )
+
+        save_dicts_to_csv([num_tail_samples, num_noise_samples], os.path.splitext(data_config_path)[0]+'.csv')
     
     _make_data(
         source_dir=source_dir,
@@ -269,6 +271,8 @@ def make_data_pareto(
             noisy_files=noisy_files,
             data_config_path=data_config_path
         )
+
+        save_dicts_to_csv([num_tail_samples, num_noise_samples], os.path.splitext(data_config_path)[0]+'.csv')
 
     _make_data(
         source_dir=source_dir,
@@ -363,7 +367,7 @@ def _make_class_info_pareto_tail(
     class_list,
     train_files,
     noise_ratio,
-    n_iter=100,
+    n_iter=1,
     noise_on_tail=True,
     class_order=None,
 ):
@@ -424,42 +428,42 @@ def _make_class_info_pareto_tail(
 
     return num_tail_samples, num_noise_samples, []
 
-def __make_class_info_pareto_tail(
-    class_list, train_files, noise_ratio, n_iter=100, noise_on_tail=True
-):
+# def __make_class_info_pareto_tail(
+#     class_list, train_files, noise_ratio, n_iter=100, noise_on_tail=True
+# ):
 
-    pareto_alpha = 6.0  # hard-coded
-    target_class_dist = get_discrete_pareto_pmf(
-        alpha=pareto_alpha, sampe_space_size=len(class_list)
-    )
-    num_train_samples = {}
-    for train_class in train_files.keys():
-        num_train_samples[train_class] = len(train_files[train_class])
+#     pareto_alpha = 6.0  # hard-coded
+#     target_class_dist = get_discrete_pareto_pmf(
+#         alpha=pareto_alpha, sampe_space_size=len(class_list)
+#     )
+#     num_train_samples = {}
+#     for train_class in train_files.keys():
+#         num_train_samples[train_class] = len(train_files[train_class])
 
-    total_num_tail_samples = 0
-    _target_class_dist = deepcopy(target_class_dist)
-    for _ in range(n_iter):
-        np.random.shuffle(_target_class_dist)
-        _target_num_class_samples = redistribute_num_class_samples(
-            list(num_train_samples.values()), _target_class_dist
-        )
-        if sum(_target_num_class_samples) > total_num_tail_samples:
-            total_num_tail_samples = sum(_target_num_class_samples)
-            target_num_class_samples = _target_num_class_samples
+#     total_num_tail_samples = 0
+#     _target_class_dist = deepcopy(target_class_dist)
+#     for _ in range(n_iter):
+#         np.random.shuffle(_target_class_dist)
+#         _target_num_class_samples = redistribute_num_class_samples(
+#             list(num_train_samples.values()), _target_class_dist
+#         )
+#         if sum(_target_num_class_samples) > total_num_tail_samples:
+#             total_num_tail_samples = sum(_target_num_class_samples)
+#             target_num_class_samples = _target_num_class_samples
 
-    num_tail_samples = {}
-    for i, class_name in enumerate(train_files.keys()):
-        num_tail_samples[class_name] = target_num_class_samples[i]
+#     num_tail_samples = {}
+#     for i, class_name in enumerate(train_files.keys()):
+#         num_tail_samples[class_name] = target_num_class_samples[i]
 
-    min_size = 20
-    if noise_on_tail:
-        min_size = 1
-    total_num_noise_samples = round(total_num_tail_samples * noise_ratio)
-    num_noise_samples = sample_name2size(
-        num_tail_samples, total_num_noise_samples, min_size
-    )
+#     min_size = 20
+#     if noise_on_tail:
+#         min_size = 1
+#     total_num_noise_samples = round(total_num_tail_samples * noise_ratio)
+#     num_noise_samples = sample_name2size(
+#         num_tail_samples, total_num_noise_samples, min_size
+#     )
 
-    return num_tail_samples, num_noise_samples, []
+#     return num_tail_samples, num_noise_samples, []
 
 
 
@@ -905,7 +909,6 @@ def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
             num_noise_samples[class_name] = _num_noise_samples_on_this_class
     
     head_classes = [class_name for class_name in class_names if class_name not in num_tail_samples]
-
     
     _all_files = get_relative_paths(data_dir, list_end_branch_files(data_dir))
     _train_files = get_relative_paths(data_dir, list_end_branch_files(os.path.join(data_dir, '*', 'train', 'good')))
@@ -929,28 +932,28 @@ def make_config_pkl_from_data(data_dir, data_name='mvtec', save_pkl=False):
 
 def make_data(args):
 
-    if args.easy_tail:
-        tail_difficulty = 'easy'
-    else:
-        tail_difficulty = 'hard'
-
-    target_dir = f"{args.source_dir}_{args.tail_type}_{tail_difficulty}_nr{int(args.noise_ratio*100):02d}"
+    target_dir = f"{args.source_dir}_{args.tail_type}_{args.tail_level}_nr{int(args.noise_ratio*100):02d}"
+    
+    
 
     if args.tail_type == "step":
-
-        if args.easy_tail:
-            tail_classes = STEP_TAIL_CLASSES_EASY[args.data_name]
-        else:
-            tail_classes = STEP_TAIL_CLASSES_HARD[args.data_name]
 
         target_dir += (
             f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
         )
+        
         if args.noise_on_tail:
             target_dir += "_tailnoised"
         target_dir += f"_seed{args.seed}"
-
         
+        if args.tail_level == "random":
+            tail_classes = None
+        elif args.tail_level == "easy":
+            tail_classes = STEP_TAIL_CLASSES_EASY[args.data_name]
+        elif args.tail_level == "hard":
+            tail_classes = STEP_TAIL_CLASSES_HARD[args.data_name]
+        else:
+            raise NotImplementedError()
 
         make_data_step(
             args.source_dir,
@@ -962,15 +965,19 @@ def make_data(args):
             tail_classes=tail_classes,
         )
     elif args.tail_type == "pareto":
-
+        
         if args.noise_on_tail:
             target_dir += "_tailnoised"
         target_dir += f"_seed{args.seed}"
-
-        if args.easy_tail:
+        
+        if args.tail_level == "random":
+            class_order = None
+        elif args.tail_level == "easy":
             class_order = PARETO_CLASS_ORDER_EASY[args.data_name]
-        else:
+        elif args.tail_level == "hard":
             class_order = PARETO_CLASS_ORDER_HARD[args.data_name]
+        else:
+            raise NotImplementedError()
 
         make_data_pareto(
             args.source_dir,

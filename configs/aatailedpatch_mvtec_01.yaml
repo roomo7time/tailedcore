@@ -13,7 +13,7 @@ model:
 
   coreset_model_name: "aatailedpatch"
   tail_th_type: "symmin"
-  data_augment_tail: true
+  tail_data_augment_type: 'rot15flip'
   tail_lof: true
 
   greedy_ratio: 0.1
