@@ -160,8 +160,8 @@ cython_debug/
 #.idea/
 
 .vscode/
-artifacts/
-data/
+artifacts
+data
 
 # configs/*
 # !configs/patchcore_mvtec_00.yaml
