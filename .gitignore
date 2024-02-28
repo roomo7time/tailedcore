@@ -160,8 +160,11 @@ cython_debug/
 #.idea/
 
 .vscode/
+artifacts
+artifacts/
 artifacts/*
-
+data
+data/
 data/*
 
 # configs/*
