@@ -5,7 +5,7 @@ pip install matplotlib==3.8.2
 pip install scikit-learn==1.3.2
 pip install timm==0.9.12
 pip install tqdm==4.66.1
-conda install -c pytorch faiss-gpu==1.7.3
+conda install -c pytorch faiss-gpu==1.7.3 -y
 pip install onnxruntime-gpu==1.16.3
 pip install shapely==2.0.2
 pip install opencv-python==4.9.0.80
