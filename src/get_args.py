@@ -11,7 +11,8 @@ def parse_args():
     parser.add_argument(
         "--data_root_path",
         type=str,
-        default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection",
+        # default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection",
+        default="./data",
     )
 
     # few-shot setting
