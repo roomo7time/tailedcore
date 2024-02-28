@@ -162,6 +162,9 @@ cython_debug/
 .vscode/
 artifacts
 data
+data/*
+artifacts/*
+
 
 # configs/*
 # !configs/patchcore_mvtec_00.yaml
