@@ -21,7 +21,7 @@
 
 DATA_NAME="mvtec_step_hard_nr10_tk4_tr70_seed"
 
-for seed in {0..49}; do
+for seed in {3..49}; do
 
     python evaluate.py \
         --data_sub_path "mvtec_pareto_random_nr10_seed${seed}" \
