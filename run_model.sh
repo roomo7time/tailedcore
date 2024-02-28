@@ -16,7 +16,7 @@ for seed in {400..499}; do
     # Process each data name with each config name
     for data_name in "${DATA_NAMES[@]}"; do
         for config_name in "${CONFIG_NAMES[@]}"; do
-            python evaluate.py --data_sub_path "anomaly_detection/${data_name}" --config_name "${config_name}"
+            python evaluate.py --data_sub_path "${data_name}" --config_name "${config_name}"
         done
     done
 done
