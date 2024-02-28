@@ -123,7 +123,7 @@ def get_args():
     parser.add_argument(
         "--source_dir",
         type=str,
-        default="/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
+        default="./data/mvtec",
         # choices=[
         #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
         #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
