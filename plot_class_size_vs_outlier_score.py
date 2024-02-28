@@ -3,10 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.pyplot import cm
 import os
+import torch.nn.functional as F
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.neighbors import KernelDensity
 
 import plot_utils
 from src.sampler import LOFSampler, TailSampler, GreedyCoresetSampler
 from src.utils import set_seed
+
 
 def get_extracted_artifacts():
 
@@ -34,7 +38,7 @@ def plots():
     extracted, artifact_name = get_extracted_artifacts()
 
     feas = extracted["feas"]
-    gaps = extracted["gaps"]
+    embeddings = extracted["gaps"]
     rmasks = extracted["downsized_masks"]
     class_names = extracted["class_names"]
     class_sizes = extracted["class_sizes"]
@@ -55,7 +59,7 @@ def plots():
     lof_sampler = LOFSampler()
     tail_sampler = TailSampler()
 
-    _, tail_indices = tail_sampler.run(gaps)
+    _, tail_indices, cizes = tail_sampler.run(embeddings, return_class_sizes=True)
 
     outlier_scores_path = f"./shared_resources/{artifact_name}_outlier_scores.pt"
 
@@ -68,56 +72,87 @@ def plots():
         torch.save(outlier_scores, outlier_scores_path)
 
     shot_labels[is_anomaly_gt.bool()] = 0
-    greedy_sampler = GreedyCoresetSampler(
-        percentage=0.01,
-        dimension_to_project_features_to=128,
-        device=torch.device("cuda:0"),
-    )
-    """
-    plots
-    """
-    # class_to_int = {name: index for index, name in enumerate(sorted(set(class_names)))}
-    # class_labels = [class_to_int[name] for name in class_names]
+
+    # extra scores
+    kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(embeddings)
+    log_densities = kde.score_samples(embeddings)
+    kdenlds = -log_densities
+
+    clf = LocalOutlierFactor(n_neighbors=6, metric="l2")
+    clf.fit(embeddings)
+    lofs = -clf.negative_outlier_factor_
+
+    cizes = cizes[:, None].repeat(1, h * w).reshape((-1,)).numpy()
+    lofs = torch.from_numpy(lofs[:, None]).repeat(1, h * w).reshape((-1,)).numpy()
+    kdenlds = torch.from_numpy(kdenlds[:, None]).repeat(1, h * w).reshape((-1,)).numpy()
 
     # _plot_removal_shot_ratio(outlier_scores, shot_labels)
-    _plot_density_embedding_vs_patch(
-        outlier_scores,
-        (h, w),
-        shot_labels,
-        gaps,
+    # _plot_patch_vs_density_embedding(
+    #     outlier_scores,
+    #     (h, w),
+    #     shot_labels,
+    #     embeddings,
+    # )
+    _plot_tpr_vs_fpr(
+        outlier_scores.numpy(), lofs, kdenlds, -cizes, (shot_labels == 1).long()
     )
 
 
-def _plot_density_embedding_vs_patch(
+def _plot_tpr_vs_fpr(
+    patch_lofs,
+    lofs,
+    neg_log_densities,
+    cizes,
+    few_shot_labels,
+):
+    plot_utils.plot_roc_curves(
+        [patch_lofs, lofs, neg_log_densities, cizes],
+        true_labels=few_shot_labels,
+        score_names=["LOF-patch", "LOF", "KDE", "Ours"],
+    )
+
+
+def _plot_patch_vs_density_embedding(
     feature_outlier_scores,
     feature_map_shape,
     shot_labels,
     embeddings,
-):  
+):
     h, w = feature_map_shape
-    
-    _, _, embedding_outlier_scores = lof_sampler.run(
-        embeddings, return_outlier_scores=True
-    )
+
+    embeddings = F.normalize(embeddings, dim=-1).numpy()
+
+    kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(embeddings)
+    log_density = kde.score_samples(embeddings)
+
+    embedding_outlier_scores = -log_density
+    # embedding_outlier_scores = - np.exp(log_density)
+
+    # clf = LocalOutlierFactor(n_neighbors=6, metric="l2")
+    # clf.fit(embeddings)
+    # embedding_outlier_scores = -clf.negative_outlier_factor_
 
     n = len(feature_outlier_scores)
 
-    embedding_outlier_scores = embedding_outlier_scores[:, None].repeat(1, h*w).reshape((-1, ))
+    embedding_outlier_scores = (
+        torch.from_numpy(embedding_outlier_scores)[:, None]
+        .repeat(1, h * w)
+        .reshape((-1,))
+    )
 
     # random_indices = np.random.choice(n, size=int(n*0.01), replace=False)
     # feature_outlier_scores = feature_outlier_scores[random_indices]
     # embedding_outlier_scores = embedding_outlier_scores[random_indices]
 
-    plot_utils.plot_and_save_correlation_graph( 
-        scores1=feature_outlier_scores,
-        scores2=embedding_outlier_scores,
+    plot_utils.plot_and_save_correlation_graph(
+        scores1=embedding_outlier_scores.numpy(),
+        scores2=feature_outlier_scores.numpy(),
         labels=shot_labels,
         label_names=["Anomaly", "Few-shot", "Medium-shot", "Many-shot"],
-        score1_name="Patch outlier score",
-        score2_name="Embedding outlier score"
+        score1_name="Negative log density of embedding",
+        score2_name="Patch outlier score",
+        ylim=(0.9, 2.5),
     )
-
-    
 
 
 def _plot_removal_shot_ratio(outlier_scores, labels):
@@ -147,7 +182,7 @@ def _plot_removal_shot_ratio(outlier_scores, labels):
         x_ticks=label_names,
         y_label="Ratio in lowest density patches",
         filename="./test.jpg",
-        show=True,
+        show=False,
         legend=False,
     )
 
