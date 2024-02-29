@@ -9,6 +9,13 @@
 
 Then, run `bash run_make_visa.sh`
 
+## Long-tail noisy data download
+
+[MVTec-LT-Noisy (step tail k=4)](https://www.dropbox.com/scl/fi/5ssqx9fq4h3lb56npetdm/mvtec_step_random_nr10_tk4_tr60.zip?rlkey=f2s0xpa5z8jp9bqcnrv3um5yj&dl=0)
+
+[MVTec-LT-Noisy (pareto tail)](https://www.dropbox.com/scl/fi/0couau4d8ffag96dnia61/mvtec_pareto_random_nr10.zip?rlkey=aknswq9tioo1i5smgjlpe9pms&dl=0)
+
+
 
 
 ## Artifacts download
