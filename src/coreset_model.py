@@ -920,6 +920,8 @@ class AATailedPatch(BaseCore):
             return self._get_tail_augmented_features_rotflip(trainloader, tail_indices, rot_degree=30, flip=True)
         elif self.tail_data_augment_type == 'rot45flip':
             return self._get_tail_augmented_features_rotflip(trainloader, tail_indices, rot_degree=45, flip=True)
+        elif self.tail_data_augment_type == 'rotflip':
+            return self._get_tail_augmented_features_rot90flip(trainloader, tail_indices)
         elif self.tail_data_augment_type == 'auto':
             raise NotImplementedError()
         else:
@@ -995,6 +997,53 @@ class AATailedPatch(BaseCore):
                         features.append(_features)
 
                         assert _features.shape[0] % (self.feature_map_shape[0]*self.feature_map_shape[1]) == 0
+
+        features = torch.cat(features, dim=0)
+
+        return features
+    
+    def _get_tail_augmented_features_rot90flip(self, trainloader: DataLoader, tail_indices):
+        self.feature_embedder.eval()
+
+        batch_size = trainloader.batch_size
+        assert isinstance(trainloader.sampler, SequentialSampler)
+
+        features = []
+        tail_indices_set = set(tail_indices.tolist())  # Convert to a set for faster lookup
+
+        with tqdm(trainloader, desc="Computing support features...", leave=False) as data_iterator:
+            for batch_idx, data in enumerate(data_iterator):
+                # Calculate the indices for the current batch
+                current_indices = range(batch_idx * batch_size, (batch_idx + 1) * batch_size)
+
+                # Check if these indices intersect with tail_indices
+                relevant_indices = [idx for idx in current_indices if idx in tail_indices_set]
+
+                if relevant_indices:
+                    if isinstance(data, dict):
+                        images = data["image"]
+
+                    # Select only the images corresponding to relevant indices
+                    relevant_images = images[[i - batch_idx * batch_size for i in relevant_indices]]
+
+                    # Rotate each image by 45, 90, ..., 315 degrees and collect features
+                    for angle in [0, 90, 180, 270]:
+                        for flip in [0, 1]:
+                            if (angle, flip) == (0, 0):
+                                continue
+
+                            if flip == 1:
+                                flipped_images = TF.hflip(relevant_images)
+                            else:
+                                flipped_images = relevant_images
+                            
+                            if angle != 0:
+                                rotated_images = TF.rotate(flipped_images, angle)
+                            else:
+                                rotated_images = flipped_images
+                            
+                            _features = self.feature_embedder(rotated_images)
+                            features.append(_features)
 
         features = torch.cat(features, dim=0)
 

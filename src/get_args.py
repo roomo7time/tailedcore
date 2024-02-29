@@ -21,10 +21,11 @@ def parse_args():
         type=str,
         # mvtec
         # default="mvtec_step_random_nr10_tk4_tr60_seed102",
-        default="mvtec_pareto_random_nr10_seed102",
+        # default="mvtec_pareto_random_nr10_seed102",
+        default="visa_pareto_random_nr05_seed0",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
-    parser.add_argument("--config_name", type=str, default="tailedpatch_mvtec_01")
+    parser.add_argument("--config_name", type=str, default="aatailedpatch_mvtec_05")
 
     # # toy setting
     # parser.add_argument(
