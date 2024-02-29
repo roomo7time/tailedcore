@@ -124,14 +124,7 @@ def get_args():
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
     parser.add_argument("--noise_ratio", type=float, default=0.05, help="") # mvtec 0.1, visa 0.05
-    parser.add_argument(
-        "--source_dir",
-        type=str,
-        # default="./data/mvtec",
-        default="./data/visa",
-        help="",
-    )
-    parser.add_argument("--seed", type=int, default=999, help="")
+    parser.add_argument("--seed", type=int, default=0, help="")
     parser.add_argument(
         "--tail_level",
         type=str,
@@ -394,7 +387,7 @@ def _select_tailed_noises(
     noisy_files = {}
     for noisy_class, num_samples in num_noise_samples.items():
         noisy_files[noisy_class] = random.sample(
-            anomaly_files[noisy_class], num_samples
+            anomaly_files[noisy_class], min(num_samples, len(anomaly_files[noisy_class]))
         )
 
     tailed_files = [item for sublist in tailed_files.values() for item in sublist]
