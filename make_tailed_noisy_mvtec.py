@@ -115,7 +115,7 @@ def get_args():
         "--data_name", type=str, choices=["mvtec", "visa"], default="mvtec", help=""
     )
     parser.add_argument(
-        "--tail_type", type=str, choices=["step", "pareto"], default="pareto", help=""
+        "--tail_type", type=str, choices=["step", "pareto"], default="step", help=""
     )
     parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
@@ -125,13 +125,9 @@ def get_args():
         "--source_dir",
         type=str,
         default="./data/mvtec",
-        # choices=[
-        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/mvtec",
-        #     "/home/jay/mnt/hdd01/data/image_datasets/anomaly_detection/visa"
-        # ],
         help="",
     )
-    parser.add_argument("--seed", type=int, default=505, help="")
+    parser.add_argument("--seed", type=int, default=101, help="")
     parser.add_argument("--tail_level", type=str, default='random', choices=["random", "easy", "hard"], help="")
 
     return parser.parse_args()
@@ -178,6 +174,15 @@ def make_data_step(
 
     if os.path.exists(data_config_path):
         tailed_files, noisy_files = _load_data_config(data_config_path)
+    elif os.path.exists(target_dir):
+        data_config = make_config_pkl_from_data(target_dir)
+        tailed_files, noisy_files = data_config["tailed_files"], data_config["noisy_files"]
+
+        _save_data_config(
+            tailed_files=tailed_files,
+            noisy_files=noisy_files,
+            data_config_path=data_config_path
+        )
     else:
 
         _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
@@ -205,17 +210,13 @@ def make_data_step(
             head_classes=head_classes,
         )
 
-        if os.path.exists(target_dir):
-            data_config = make_config_pkl_from_data(target_dir)
-            tailed_files, noisy_files = data_config["tailed_files"], data_config["noisy_files"]
+        save_dicts_to_csv([num_tail_samples, num_noise_samples], os.path.splitext(data_config_path)[0]+'.csv')
 
         _save_data_config(
             tailed_files=tailed_files,
             noisy_files=noisy_files,
             data_config_path=data_config_path
         )
-
-        save_dicts_to_csv([num_tail_samples, num_noise_samples], os.path.splitext(data_config_path)[0]+'.csv')
     
     _make_data(
         source_dir=source_dir,
