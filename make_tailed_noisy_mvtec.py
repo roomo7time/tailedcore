@@ -138,7 +138,7 @@ def get_args():
         choices=["random", "easy", "hard"],
         help="",
     )
-    parser.add_argument("--copy", type=bool, default=False, 
+    parser.add_argument("--copy", action='store_true', 
                         help="Copy files. If false, then symlink")
 
     return parser.parse_args()
