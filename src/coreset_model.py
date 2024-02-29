@@ -319,12 +319,12 @@ class TailedPatch(BaseCore):
             brute=brute,
         )
 
-        self.tail_sampler = TailSampler()
+        self.tail_sampler = TailSampler(th_type='indep')
 
         if noise_discriminator_type == 'few_shot_lof':
-            self.noise_discriminator = FewShotLOFSampler(
+            self.noise_discriminator = TailedLOFSampler(
                 device=device if sampler_on_gpu else torch.device("cpu"),
-                auto=auto_thresholding_on_lof
+                tail_th_type='indep'
             )
         elif  noise_discriminator_type == 'lof':
             self.noise_discriminator = LOFSampler(
@@ -422,7 +422,9 @@ class TailedPatch(BaseCore):
                     _features, _embeddings = self.feature_embedder(
                         images, return_embeddings=True
                     )
-                    embeddings.append(_embeddings[:, :, 0, 0])
+                    if _embeddings.ndim == 4:
+                        _embeddings = _embeddings[:, :, 0, 0]
+                    embeddings.append(_embeddings)
                 else:
                     _features = self.feature_embedder(images)
                 features.append(_features)
@@ -790,6 +792,9 @@ class AATailedPatch(BaseCore):
             coreset_features = self._get_coreset(trainloader)
             self._save_coreset_features(coreset_features)
 
+        gc.collect()
+        torch.cuda.empty_cache()
+
         if set_predictor:
 
             nn_method = FaissNN(
@@ -896,7 +901,10 @@ class AATailedPatch(BaseCore):
 
         tail_augmented_features = self._get_tail_augmented_features(trainloader, tail_embedding_indices)
 
-        tail_features = torch.cat([tail_base_features, tail_augmented_features], dim=0)
+        if tail_augmented_features is None:
+            tail_features = tail_base_features
+        else:
+            tail_features = torch.cat([tail_base_features, tail_augmented_features], dim=0)
 
         coreset_tail_features, _ = self.greedy_coreset_sampler.run(tail_features)
 
@@ -910,8 +918,12 @@ class AATailedPatch(BaseCore):
             return self._get_tail_augmented_features_rotflip(trainloader, tail_indices, rot_degree=15, flip=True)
         elif self.tail_data_augment_type == 'rot30flip':
             return self._get_tail_augmented_features_rotflip(trainloader, tail_indices, rot_degree=30, flip=True)
-        else:
+        elif self.tail_data_augment_type == 'rot45flip':
+            return self._get_tail_augmented_features_rotflip(trainloader, tail_indices, rot_degree=45, flip=True)
+        elif self.tail_data_augment_type == 'auto':
             raise NotImplementedError()
+        else:
+            raise ValueError()
 
     def _get_tail_augmented_features_rotflip(self, trainloader: DataLoader, tail_indices: torch.Tensor, rot_degree=15, flip=False):
         self.feature_embedder.eval()
