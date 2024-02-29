@@ -115,7 +115,7 @@ NUM_TRAIN_SAMPLES_MVTEC = {
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
     parser.add_argument(
-        "--data_name", type=str, choices=["mvtec", "visa"], default="mvtec", help=""
+        "--data_name", type=str, choices=["mvtec", "visa"], default="visa", help=""
     )
     parser.add_argument(
         "--tail_type", type=str, choices=["step", "pareto"], default="pareto", help=""
@@ -123,19 +123,20 @@ def get_args():
     parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
-    parser.add_argument("--noise_ratio", type=float, default=0.1, help="")
+    parser.add_argument("--noise_ratio", type=float, default=0.05, help="") # mvtec 0.1, visa 0.05
     parser.add_argument(
         "--source_dir",
         type=str,
-        default="./data/mvtec",
+        # default="./data/mvtec",
+        default="./data/visa",
         help="",
     )
-    parser.add_argument("--seed", type=int, default=105, help="")
+    parser.add_argument("--seed", type=int, default=999, help="")
     parser.add_argument(
         "--tail_level",
         type=str,
         default="random",
-        choices=["random", "easy", "hard"],
+        choices=["random", "easy", "hard"],     # easy and hard is not feasible for 
         help="",
     )
     parser.add_argument("--copy", action='store_true', 
@@ -1003,8 +1004,8 @@ def make_config_pkl_from_data(data_dir, data_name="mvtec", save_pkl=False):
 
 
 def make_data(args):
-
-    target_dir = f"{args.source_dir}_{args.tail_type}_{args.tail_level}_nr{int(args.noise_ratio*100):02d}"
+    source_dir = f"./data/{args.data_name}"
+    target_dir = f"{source_dir}_{args.tail_type}_{args.tail_level}_nr{int(args.noise_ratio*100):02d}"
 
     if args.tail_type == "step":
 
@@ -1026,7 +1027,7 @@ def make_data(args):
             raise NotImplementedError()
 
         make_data_step(
-            args.source_dir,
+            source_dir,
             target_dir,
             noise_on_tail=args.noise_on_tail,
             tail_k=args.step_tail_k,
@@ -1051,7 +1052,7 @@ def make_data(args):
             raise NotImplementedError()
 
         make_data_pareto(
-            args.source_dir,
+            source_dir,
             target_dir,
             noise_on_tail=args.noise_on_tail,
             seed=args.seed,
@@ -1065,7 +1066,7 @@ def make_data(args):
 
     # verification
     compare_directories(
-        args.source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
+        source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
     )
 
 
