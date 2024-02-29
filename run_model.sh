@@ -19,17 +19,15 @@
 
 #!/bin/bash
 
-DATA_NAME="mvtec_step_hard_nr10_tk4_tr70_seed"
+for seed in {50..99}; do
 
-for seed in {3..49}; do
+    # python evaluate.py \
+    #     --data_sub_path "mvtec_pareto_random_nr10_seed${seed}" \
+    #     --config_name "aatailedpatch_mvtec_02"
 
-    python evaluate.py \
-        --data_sub_path "mvtec_pareto_random_nr10_seed${seed}" \
-        --config_name "aatailedpatch_mvtec_02"
-
-    python evaluate.py \
-        --data_sub_path "mvtec_step_random_nr10_tk4_tr60_seed${seed}" \
-        --config_name "aatailedpatch_mvtec_01"
+    # python evaluate.py \
+    #     --data_sub_path "mvtec_step_random_nr10_tk4_tr60_seed${seed}" \
+    #     --config_name "aatailedpatch_mvtec_01"
 
     python evaluate.py \
         --data_sub_path "mvtec_step_random_nr10_tk1_tr60_seed${seed}" \
