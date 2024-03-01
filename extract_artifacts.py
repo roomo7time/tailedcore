@@ -7,6 +7,7 @@ import re
 import glob
 import torch
 import PIL
+import argparse
 import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -26,8 +27,8 @@ from src.feature_extractor import FeatureExtractor
 from src.patch_maker import PatchMaker
 
 
-def extract_features(args):
-
+def extract_artifacts(args):
+    args.batch_size = 4
     assert args.data_format == "mvtec-multiclass"
 
     utils.set_seed(args.config.seed)
@@ -37,6 +38,19 @@ def extract_features(args):
     device = utils.set_torch_device(args.gpu)
 
     input_shape = (3, config.data.inputsize, config.data.inputsize)
+
+    backbone = get_backbone(args.config.model.backbone_names[0])
+
+    feature_extractor = FeatureEmbedder(
+        device,
+        input_shape,
+        backbone,
+        config.model.layers_to_extract,
+        embedding_to_extract_from=config.model.embedding_to_extract_from,
+    )
+
+    feature_extractor.eval()
+    feature_map_shape = feature_extractor.get_feature_map_shape()
 
     dataloaders = get_dataloaders(
         config.data,
@@ -49,108 +63,76 @@ def extract_features(args):
     _test_dataloader = dataloaders[0]["test"]
     transform_mask = _test_dataloader.dataset.transform_mask
 
-    save_train_dir_path = os.path.join(
-        "./artifacts", args.data_name, args.config_name, _train_dataloader.name
+    save_extracted_dir = os.path.join("./artifacts", args.data_name, args.config_name)
+
+    extracted_path_train = os.path.join(
+        save_extracted_dir, f"extracted_train_{_train_dataloader.name}.pt"
     )
-    extracted_path = os.path.join(save_train_dir_path, "extracted.pt")
 
-    if not os.path.exists(extracted_path):
+    artifacts = _extract_artifacts(_train_dataloader, feature_extractor, transform_mask)
 
-        backbone = get_backbone(
-            args.config.model.backbone_names[0]
-        )  # FIXME: fix the hard-coding
+    artifacts["feature_map_shape"] = feature_map_shape
 
-        feature_embedder = FeatureEmbedder(
-            device,
-            input_shape,
-            backbone,
-            config.model.layers_to_extract,
-            embedding_to_extract_from=config.model.embedding_to_extract_from,
+    print("Saving artifacts...")
+    os.makedirs(os.path.dirname(extracted_path_train), exist_ok=True)
+    torch.save(artifacts, extracted_path_train)
+    print("Artifacts have been saved...")
+
+
+def _extract_artifacts(
+    dataloader,
+    feature_extractor,
+    transform_mask,
+):
+    print("Extracting artifacts...")
+    feas = []
+    gaps = []
+    masks = []
+    labels = []
+    class_sizes = []
+    class_names = []
+    image_names = []
+
+    for data in tqdm(dataloader, desc="Extracting features..."):
+        _images = data["image"]
+        _image_paths = data["image_path"]
+        _image_names = data["image_name"]
+
+        _labels = data["is_anomaly"]
+
+        _class_sizes = get_class_sizes_mvtec(_image_paths)
+        _class_names = _get_class_names_mvtec(_image_paths)
+
+        _masks = data["mask"]
+
+        _masks, _labels = revise_masks_mvtec(
+            _image_paths, _masks, _labels, transform_mask
         )
 
-        feature_embedder.eval()
+        _feas, _gaps = feature_extractor(_images, return_embeddings=True)
 
-        fea_map_shape = feature_embedder.get_feature_map_shape()
+        feas.append(_feas)
+        gaps.append(_gaps)
+        masks.append(_masks)
+        labels.append(_labels)
+        class_sizes.append(_class_sizes)
+        class_names += _class_names
+        image_names += _image_names
 
-        mapper = torch.nn.Linear(
-            fea_map_shape[-1], 128, bias=False  # hard coded, always fixed
-        )
+    feas = torch.cat(feas)
+    gaps = torch.cat(gaps)
+    masks = torch.cat(masks)
+    labels = torch.cat(labels)
+    class_sizes = torch.cat(class_sizes)
 
-        freeze(mapper)
-
-        mapper = mapper.to(device)
-
-        feas = []
-        reduced_feas = []
-        gaps = []
-        masks = []
-        downsized_masks = []
-        labels = []
-        class_sizes = []
-        class_names = []
-        image_paths = []
-
-        for data in tqdm(_train_dataloader, desc="Extracting features..."):
-            _images = data["image"]
-            _image_paths = data["image_path"]
-
-            _labels = data["is_anomaly"]
-
-            _class_sizes = get_class_sizes_mvtec(_image_paths)
-            _class_names = _get_class_names_mvtec(_image_paths)
-
-            _masks = data["mask"]
-
-            _masks, _labels = revise_masks_mvtec(
-                _image_paths, _masks, _labels, transform_mask
-            )
-
-            _downsized_masks = _resize_mask(
-                _masks, target_size=(fea_map_shape[0], fea_map_shape[1])
-            )
-
-            _feas, _gaps = feature_embedder(_images, return_embeddings=True)
-            _masks = _masks.floor()
-
-            with torch.no_grad():
-                _reduced_feas = mapper(_feas.to(device)).cpu()
-
-            _feas = unpatch_feas(_feas, fea_map_shape=fea_map_shape[:2])
-            _reduced_feas = unpatch_feas(_reduced_feas, fea_map_shape=fea_map_shape[:2])
-
-            feas.append(_feas)
-            reduced_feas.append(_reduced_feas)
-            gaps.append(_gaps)
-            masks.append(_masks)
-            downsized_masks.append(_downsized_masks)
-            labels.append(_labels)
-            class_sizes.append(_class_sizes)
-            class_names += _class_names
-            image_paths += _image_paths
-
-        feas = torch.cat(feas)
-        reduced_feas = torch.cat(reduced_feas)
-        gaps = torch.cat(gaps)
-        masks = torch.cat(masks)
-        downsized_masks = torch.cat(downsized_masks)
-        labels = torch.cat(labels)
-        class_sizes = torch.cat(class_sizes)
-
-        print("Saving features...")
-        os.makedirs(os.path.dirname(extracted_path), exist_ok=True)
-        torch.save(
-            {
-                "feas": feas,
-                "reduced_feas": reduced_feas,
-                "masks": masks,
-                "downsized_masks": downsized_masks,
-                "gaps": gaps,
-                "labels": labels,
-                "class_sizes": class_sizes,
-                "class_names": class_names,
-            },
-            extracted_path,
-        )
+    return {
+        "feas": feas,
+        "masks": masks,
+        "gaps": gaps,
+        "labels": labels,
+        "class_sizes": class_sizes,
+        "class_names": class_names,
+    }
 
 
 def freeze(model):
@@ -219,7 +201,7 @@ def revise_masks_mvtec(image_paths, masks, labels, transform_mask):
 
             mask = PIL.Image.open(mask_path)
             mask = transform_mask(mask)
-            
+
             masks[i] = mask
             labels[i] = 1
 
@@ -286,4 +268,4 @@ def _plot_and_save_tensor(tensor, filename="output.png"):
 if __name__ == "__main__":
 
     args = parse_args()
-    extract_features(args)
+    extract_artifacts(args)
