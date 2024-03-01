@@ -1,23 +1,28 @@
 #!/bin/bash
 
-for seed in {0..49}; do
-    # python make_tailed_noisy_mvtec.py \
-    #     --tail_type "step" \
-    #     --step_tail_k 4 \
-    #     --step_tail_class_ratio 0.6 \
-    #     --seed ${seed} \
-    #     --tail_level "random" \
-
-    # python make_tailed_noisy_mvtec.py \
-    #     --tail_type "step" \
-    #     --step_tail_k 1 \
-    #     --step_tail_class_ratio 0.6 \
-    #     --seed ${seed} \
-    #     --tail_level "random"
+for seed in {0..99}; do
+    python make_tailed_noisy_mvtec.py \
+        --data_name "mvtec" \
+        --tail_type "step" \
+        --noise_ratio 0.1 \
+        --step_tail_k 4 \
+        --step_tail_class_ratio 0.6 \
+        --tail_level "random" \
+        --seed ${seed}
 
     python make_tailed_noisy_mvtec.py \
-        --data_name "visa" \
+        --data_name "mvtec" \
+        --tail_type "step" \
+        --noise_ratio 0.1 \
+        --step_tail_k 1 \
+        --step_tail_class_ratio 0.6 \
+        --tail_level "random" \
+        --seed ${seed}
+
+    python make_tailed_noisy_mvtec.py \
+        --data_name "mvtec" \
         --tail_type "pareto" \
-        --seed ${seed} \
-        --tail_level "random"
+        --noise_ratio 0.1 \
+        --tail_level "random" \
+        --seed ${seed}
 done

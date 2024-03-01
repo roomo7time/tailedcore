@@ -1,0 +1,13 @@
+
+seed: 0
+
+data:
+  resize: 256
+  imagesize: 224
+  inputsize: 224
+
+model:
+  backbone_names: ["densenet201"]
+  layers_to_extract: ["features.denseblock2", "features.denseblock3"]
+  embedding_to_extract_from: "global_pool"
+
