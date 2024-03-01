@@ -115,16 +115,16 @@ NUM_TRAIN_SAMPLES_MVTEC = {
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
     parser.add_argument(
-        "--data_name", type=str, choices=["mvtec", "visa"], default="mvtec", help=""
+        "--data_name", type=str, choices=["mvtec", "visa"], default="visa", help=""
     )
     parser.add_argument(
         "--tail_type", type=str, choices=["step", "pareto"], default="step", help=""
     )
-    parser.add_argument("--step_tail_k", type=int, default=1, choices=[1, 4], help="")
+    parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
-    parser.add_argument("--noise_ratio", type=float, default=0.1, help="") # mvtec 0.1, visa 0.05
-    parser.add_argument("--seed", type=int, default=105, help="")
+    parser.add_argument("--noise_ratio", type=float, default=0.05, help="") # mvtec 0.1, visa 0.05
+    parser.add_argument("--seed", type=int, default=200, help="")
     parser.add_argument(
         "--tail_level",
         type=str,
@@ -462,44 +462,6 @@ def _make_class_info_pareto_tail(
     )
 
     return num_tail_samples, num_noise_samples, []
-
-
-# def __make_class_info_pareto_tail(
-#     class_list, train_files, noise_ratio, n_iter=100, noise_on_tail=True
-# ):
-
-#     pareto_alpha = 6.0  # hard-coded
-#     target_class_dist = get_discrete_pareto_pmf(
-#         alpha=pareto_alpha, sampe_space_size=len(class_list)
-#     )
-#     num_train_samples = {}
-#     for train_class in train_files.keys():
-#         num_train_samples[train_class] = len(train_files[train_class])
-
-#     total_num_tail_samples = 0
-#     _target_class_dist = deepcopy(target_class_dist)
-#     for _ in range(n_iter):
-#         np.random.shuffle(_target_class_dist)
-#         _target_num_class_samples = redistribute_num_class_samples(
-#             list(num_train_samples.values()), _target_class_dist
-#         )
-#         if sum(_target_num_class_samples) > total_num_tail_samples:
-#             total_num_tail_samples = sum(_target_num_class_samples)
-#             target_num_class_samples = _target_num_class_samples
-
-#     num_tail_samples = {}
-#     for i, class_name in enumerate(train_files.keys()):
-#         num_tail_samples[class_name] = target_num_class_samples[i]
-
-#     min_size = 20
-#     if noise_on_tail:
-#         min_size = 1
-#     total_num_noise_samples = round(total_num_tail_samples * noise_ratio)
-#     num_noise_samples = sample_name2size(
-#         num_tail_samples, total_num_noise_samples, min_size
-#     )
-
-#     return num_tail_samples, num_noise_samples, []
 
 
 def sample_name2size(name2size, n_samples, min_size=20):
@@ -1022,6 +984,7 @@ def make_data(args):
         make_data_step(
             source_dir,
             target_dir,
+            noise_ratio=args.noise_ratio,
             noise_on_tail=args.noise_on_tail,
             tail_k=args.step_tail_k,
             tail_class_ratio=args.step_tail_class_ratio,
@@ -1047,6 +1010,7 @@ def make_data(args):
         make_data_pareto(
             source_dir,
             target_dir,
+            noise_ratio=args.noise_ratio,
             noise_on_tail=args.noise_on_tail,
             seed=args.seed,
             class_order=class_order,
