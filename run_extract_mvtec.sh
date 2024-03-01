@@ -1,7 +1,6 @@
 
 #!/bin/bash
 
-# Create logs directory if it doesn't exist
 mkdir -p ./logs
 
 for seed in {101..105}; do

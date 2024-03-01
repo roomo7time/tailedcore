@@ -19,7 +19,7 @@
 # done
 
 # visa
-for seed in {0..99}; do
+for seed in {200..299}; do
 
     # python evaluate.py \
     #     --data_sub_path "visa_pareto_random_nr05_seed${seed}" \

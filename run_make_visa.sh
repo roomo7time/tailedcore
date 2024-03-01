@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for seed in {0..99}; do
+for seed in {200..299}; do
     python make_tailed_noisy_mvtec.py \
         --data_name "visa" \
         --tail_type "step" \
@@ -19,10 +19,10 @@ for seed in {0..99}; do
         --tail_level "random" \
         --seed ${seed}
 
-    # python make_tailed_noisy_mvtec.py \
-    #     --data_name "visa" \
-    #     --tail_type "pareto" \
-    #     --noise_ratio 0.05 \
-    #     --tail_level "random" \
-    #     --seed ${seed}
+    python make_tailed_noisy_mvtec.py \
+        --data_name "visa" \
+        --tail_type "pareto" \
+        --noise_ratio 0.05 \
+        --tail_level "random" \
+        --seed ${seed}
 done
