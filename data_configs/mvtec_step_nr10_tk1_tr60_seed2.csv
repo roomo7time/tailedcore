@@ -1,2 +1,0 @@
-num_tail_samples,num_noise_samples
-"{'capsule': 1, 'leather': 1, 'tile': 1, 'toothbrush': 1, 'screw': 1, 'pill': 1, 'metal_nut': 1, 'bottle': 1, 'grid': 1}","{'transistor': 21, 'carpet': 28, 'cable': 22, 'wood': 25, 'zipper': 24, 'hazelnut': 39}"
