@@ -96,23 +96,42 @@ def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
 
     num_samples_per_class = predict_num_samples_per_class(class_sizes)
 
-    _num_samples_per_class = torch.cat(
-        [
-            torch.arange(len(num_samples_per_class))[:, None],
-            num_samples_per_class[:, None],
-        ],
-        dim=1,
-    )
-
-    ods = compute_orthogonal_distances(
-        _num_samples_per_class, _num_samples_per_class[[0, -1], :]
-    )
-    _max_K_idx = ods.argmax() + 1
-    max_K_idx = min(_max_K_idx, len(num_samples_per_class)-1)
-    max_K = num_samples_per_class[max_K_idx].item()
+    max_K = predict_max_K(num_samples_per_class)
 
     few_shot_idxes = (class_sizes <= max_K).to(torch.long)
     return few_shot_idxes
+
+def predict_max_K(num_samples_per_class: torch.Tensor):
+
+    max_K_percentile = _predict_max_K_max_within_percnetile(num_samples_per_class)
+    
+    max_K_elbow = _predict_max_K_elbow(num_samples_per_class)
+
+    return min(max_K_elbow, max_K_percentile)
+
+def _predict_max_K_max_within_percnetile(num_samples_per_class: torch.Tensor, p=0.15):
+
+    num_samples_per_class = num_samples_per_class.sort(descending=True)[0]
+
+    n = int(num_samples_per_class.sum() * p)
+
+    cum_den = num_samples_per_class.flip(dims=[0]).cumsum(dim=0)
+
+    k = 0
+    for nspc in cum_den:
+        if nspc > n:
+            break
+        k += 1
+
+    max_K_idx = len(cum_den) - k
+
+    max_K = num_samples_per_class[max_K_idx]
+    return max_K.item()
+
+def _predict_max_K_elbow(num_samples_per_class):
+    return elbow(num_samples_per_class)
+
+
 
 def elbow(scores: torch.Tensor, sort=True, quantize=True):
     if sort:
@@ -133,7 +152,7 @@ def elbow(scores: torch.Tensor, sort=True, quantize=True):
 
     elbow_idx = ods.argmax()
 
-    return scores[elbow_idx]
+    return scores[elbow_idx].item()
     
 
 def compute_self_sim_min(self_sim: torch.Tensor, mode="min") -> torch.Tensor:

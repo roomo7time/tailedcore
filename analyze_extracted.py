@@ -147,12 +147,11 @@ def _get_result_anomaly_patch_detection(
 
 
 def analyze_gap(extracted_path: str, data_name: str, config_name: str):
-    
+
     assert os.path.exists(extracted_path)
 
     extracted = torch.load(extracted_path)
 
-    feas = extracted["feas"]
     masks = extracted["masks"]
 
     gaps = extracted["gaps"]
@@ -206,20 +205,20 @@ def _evaluate_tail_class_detection(
 ):
 
     method_names = [
-        "lof",
         "scs_symmin",
         "scs_indep",
+        "lof",
         "if",
         "ocsvm",
-        "dbscan",
-        "dbscan_tunned",
-        "dbscan_tunned_elbow",
-        "dbscan_adaptive",
-        "dbscan_adaptive_elbow",
-        "kmeans",
-        "gmm",
-        "kde",
-        "affprop",
+        # "dbscan",
+        # "dbscan_tunned",
+        # "dbscan_tunned_elbow",
+        # "dbscan_adaptive",
+        # "dbscan_adaptive_elbow",
+        # "kmeans",
+        # "gmm",
+        # "kde",
+        # "affprop",
     ]
 
     results = []
@@ -263,6 +262,12 @@ def _get_result_tail_class_detection(
         _, tail_indices, class_sizes_pred = tail_sampler.run(
             gaps, return_class_sizes=True
         )
+        
+        # TODO: observer
+        num_samples_per_class = class_size.predict_num_samples_per_class(class_sizes_pred)
+        max_K = class_size.predict_max_K(num_samples_per_class)
+
+
         is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
     elif method_name == "if":
@@ -271,7 +276,7 @@ def _get_result_tail_class_detection(
         clf = IsolationForest(random_state=0)
         X = gaps.numpy()
         clf.fit(X)
-        tail_scores = torch.from_numpy(clf.decision_function(X)).float()
+        tail_scores = -torch.from_numpy(clf.decision_function(X)).float()
         is_tail_pred = torch.from_numpy(clf.predict(X) == -1).long()
         class_sizes_pred = torch.zeros_like(tail_scores)
     elif method_name == "ocsvm":
@@ -279,7 +284,7 @@ def _get_result_tail_class_detection(
 
         X = gaps.numpy()
         ocsvm = OneClassSVM(gamma="auto").fit(X)
-        tail_scores = torch.from_numpy(ocsvm.decision_function(X)).float()
+        tail_scores = -torch.from_numpy(ocsvm.decision_function(X)).float()
         is_tail_pred = torch.from_numpy(ocsvm.predict(X) == -1).long()
         class_sizes_pred = torch.zeros_like(tail_scores)
 
@@ -375,7 +380,7 @@ def _get_result_tail_class_detection(
         is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
     elif method_name == "kde":
         from sklearn.neighbors import KernelDensity
-
+        gaps = F.normalize(gaps, dim=-1)
         X = gaps.numpy()
         kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(X)
         log_densities = kde.score_samples(X)
@@ -682,18 +687,6 @@ from typing import List
 
 
 def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
-    """
-    Averages numeric columns in a list of dataframes, calculates the standard deviation for numeric columns,
-    preserves non-numeric columns, and places non-numeric columns on the left-most side of the resulting DataFrame.
-
-    Parameters:
-    dfs (List[pd.DataFrame]): List of Pandas DataFrames with the same columns and index
-
-    Returns:
-    pd.DataFrame: A new DataFrame with non-numeric columns on the left,
-                  followed by averaged numeric columns, and standard deviation of numeric columns on the right.
-    """
-    # Concatenate dataframes
     combined_df = pd.concat(dfs)
 
     # Identify numeric columns
@@ -715,23 +708,23 @@ def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
     return avg_df
 
 
-def analyze_mvtec(data="mvtec_all", type="gap"):
-    
-    data_names = get_data_names(data)
+def analyze(data="mvtec_all", type="gap", seeds: list=[101]):
+
+    data_names = get_data_names(data, seeds=seeds,)
 
     config_names = [
-        "tailedpatch_mvtec_01",
-        "tailedpatch_mvtec_05",
-        "tailedpatch_mvtec_06",
-        "tailedpatch_mvtec_07",
+        "extract_mvtec_01",
+        # "extract_mvtec_02",
+        # "extract_mvtec_03",
+        # "extract_mvtec_04",
     ]
 
     dfs = []
-    
+
     for config_name in config_names:
         for data_name in data_names:
 
-            extracted_path = f"./artifacts/anomaly_detection_{data_name}_mvtec-multiclass/{config_name}/all/extracted.pt"
+            extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
 
             if type == "gap":
                 _df = analyze_gap(
@@ -753,43 +746,53 @@ def analyze_mvtec(data="mvtec_all", type="gap"):
     os.makedirs("./logs", exist_ok=True)
     avg_df.to_csv(f"./logs/analysis-{data}-{type}.csv", index=False)
 
-def get_data_names(data: str):
 
-    if data == 'mvtec_all':
-        
-        seeds = [0, 2, 7]
-        data_base_names = [
-            "mvtec_pareto_nr10",
-            "mvtec_step_nr10_tk1_tr60",
-            "mvtec_step_nr10_tk4_tr60",
-        ]
+def get_data_names(data: str, seeds: list = [200]):
 
-        data_names = [f"{data_base_name}_seed{seed}" for data_base_name in data_base_names for seed in seeds]
+    # seeds = list(range(101, 106))
+    # seeds = [101]
+    # seeds = [200, 201]
 
-    elif data == 'mvtec_step_tk1':
-        seeds = [0, 2, 7]
-        data_base_names = [
-            "mvtec_step_nr10_tk1_tr60",
-        ]
+    mvtec_data_base_names = [
+        "mvtec_step_random_nr10_tk1_tr60",
+        "mvtec_step_random_nr10_tk4_tr60",
+        "mvtec_pareto_random_nr10_tk1_tr60",
+    ]
 
-        data_names = [f"{data_base_name}_seed{seed}" for data_base_name in data_base_names for seed in seeds]
-    
-    elif data == 'mvtec_step_tk4':
-        seeds = [0, 2, 7]
-        data_base_names = [
-            "mvtec_step_nr10_tk4_tr60",
-        ]
+    visa_data_base_names = [
+        "visa_step_random_nr05_tk1_tr60",
+        "visa_step_random_nr05_tk4_tr60",
+        "visa_pareto_random_nr05_tk1_tr60",
+    ]
 
-        data_names = [f"{data_base_name}_seed{seed}" for data_base_name in data_base_names for seed in seeds]
-    elif data == 'mvtec_step_pareto':
-        seeds = [0, 2, 7]
-        data_base_names = [
-            "mvtec_pareto_nr10",
-        ]
-        
-        data_names = [f"{data_base_name}_seed{seed}" for data_base_name in data_base_names for seed in seeds]
+    if data == "mvtec_all":
+        data_base_names = mvtec_data_base_names
+    elif data == "mvtec_step_tk1":
+        data_base_names = [mvtec_data_base_names[0]]
+    elif data == "mvtec_step_tk4":
+        data_base_names = [mvtec_data_base_names[1]]
+    elif data == "mvtec_step_pareto":
+        data_base_names = [mvtec_data_base_names[2]]
+    elif data == "":
+        data_base_names = [mvtec_data_base_names[2]]
+    elif data == "visa_all":
+        data_base_names = visa_data_base_names
+    elif data == "visa_step_tk1":
+        data_base_names = [visa_data_base_names[0]]
+    elif data == "visa_step_tk4":
+        data_base_names = [visa_data_base_names[1]]
+    elif data == "visa_step_pareto":
+        data_base_names = [visa_data_base_names[2]]
+    elif data == "":
+        data_base_names = [visa_data_base_names[2]]
     else:
         raise NotImplementedError()
+
+    data_names = [
+        f"{data_base_name}_seed{seed}"
+        for data_base_name in data_base_names
+        for seed in seeds
+    ]
     
     return data_names
 
@@ -797,9 +800,10 @@ def get_data_names(data: str):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
-    analyze_mvtec(data='mvtec_step_tk1', type='gap')
-    analyze_mvtec(data='mvtec_step_tk4', type='gap')
-    analyze_mvtec(data='mvtec_step_pareto', type='gap')
-    analyze_mvtec(data='mvtec_step_tk1', type='patch')
-    analyze_mvtec(data='mvtec_step_tk4', type='patch')
-    analyze_mvtec(data='mvtec_step_pareto', type='patch')
+    # analyze(data="mvtec_step_tk4", type="gap")
+    # analyze(data="mvtec_step_tk1", type="gap")   
+    # analyze(data="mvtec_step_pareto", type="gap")
+    # analyze(data="mvtec_step_tk4", type="patch")
+    # analyze(data="mvtec_step_tk1", type="patch")
+    # analyze(data="mvtec_step_pareto", type="patch")
+    analyze(data="visa_step_tk4", type="gap", seeds=[200, 201])
