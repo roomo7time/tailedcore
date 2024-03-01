@@ -1,0 +1,14 @@
+
+seed: 0
+
+data:
+  resize: 256
+  imagesize: 224
+  inputsize: 224
+
+model:
+  backbone_names: ["wideresnet101"]
+  layers_to_extract: ["layer2", "layer3"]
+  embedding_to_extract_from: "avgpool"
+
+
