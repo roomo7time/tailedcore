@@ -92,22 +92,24 @@ def predict_num_samples_per_class(
     return torch.LongTensor(num_samples_per_class).sort(descending=True)[0]
 
 
-def predict_few_shot_class_samples(class_sizes: torch.Tensor) -> torch.Tensor:
+def predict_few_shot_class_samples(class_sizes: torch.Tensor, percentile=.15) -> torch.Tensor:
 
     num_samples_per_class = predict_num_samples_per_class(class_sizes)
 
-    max_K = predict_max_K(num_samples_per_class)
+    max_K = predict_max_K(num_samples_per_class, percentile=percentile)
 
     few_shot_idxes = (class_sizes <= max_K).to(torch.long)
     return few_shot_idxes
 
-def predict_max_K(num_samples_per_class: torch.Tensor):
-
-    max_K_percentile = _predict_max_K_max_within_percnetile(num_samples_per_class)
+def predict_max_K(num_samples_per_class: torch.Tensor, percentile=.15):
     
-    max_K_elbow = _predict_max_K_elbow(num_samples_per_class)
+    max_K = _predict_max_K_elbow(num_samples_per_class)
 
-    return min(max_K_elbow, max_K_percentile)
+    if percentile < 1:
+        max_K_percentile = _predict_max_K_max_within_percnetile(num_samples_per_class, p=percentile)
+        max_K = min(max_K, max_K_percentile)
+
+    return max_K
 
 def _predict_max_K_max_within_percnetile(num_samples_per_class: torch.Tensor, p=0.15):
 
@@ -131,13 +133,22 @@ def _predict_max_K_max_within_percnetile(num_samples_per_class: torch.Tensor, p=
 def _predict_max_K_elbow(num_samples_per_class):
     return elbow(num_samples_per_class)
 
+def predict_few_shot_class_samples_by_scores(scores: torch.Tensor) -> torch.Tensor:
+    elbow_score = elbow(scores)
+    is_few_shot = (scores < elbow_score).long()
+    return is_few_shot
 
 
-def elbow(scores: torch.Tensor, sort=True, quantize=True):
+def elbow(scores: torch.Tensor, sort=True, quantize=False):
+    if quantize:
+        n = float(len(scores))
+        scores = (scores * n).long()
+    else:
+        n = 1.
+    
     if sort:
-        if quantize:
-            pass
         scores = scores.sort(descending=True)[0]
+    
     _scores = torch.cat(
         [
             torch.arange(len(scores))[:, None],
@@ -152,7 +163,7 @@ def elbow(scores: torch.Tensor, sort=True, quantize=True):
 
     elbow_idx = ods.argmax()
 
-    return scores[elbow_idx].item()
+    return scores[elbow_idx].item() / n
     
 
 def compute_self_sim_min(self_sim: torch.Tensor, mode="min") -> torch.Tensor:
