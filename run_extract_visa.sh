@@ -3,7 +3,7 @@
 
 mkdir -p ./logs
 
-for seed in {202..249}; do
+for seed in {200..249}; do
     # Define config names
     CONFIG_NAMES=(
         "extract_mvtec_01"
@@ -16,7 +16,7 @@ for seed in {202..249}; do
     DATA_NAMES=(
         "visa_step_random_nr05_tk1_tr60_seed${seed}"
         "visa_step_random_nr05_tk4_tr60_seed${seed}"
-        "visa_pareto_random_nr05_seed0"
+        "visa_pareto_random_nr05_seed${seed}"
     )
 
     # Process each data name with each config name

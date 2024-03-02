@@ -210,15 +210,13 @@ def _evaluate_tail_class_detection(
         "lof",
         "if",
         "ocsvm",
-        # "dbscan",
-        # "dbscan_tunned",
-        # "dbscan_tunned_elbow",
-        # "dbscan_adaptive",
-        # "dbscan_adaptive_elbow",
-        # "kmeans",
-        # "gmm",
-        # "kde",
-        # "affprop",
+        "dbscan",
+        "dbscan_adaptive",
+        "dbscan_adaptive_elbow",
+        "kmeans",
+        "gmm",
+        "kde",
+        "affprop",
     ]
 
     results = []
@@ -267,7 +265,6 @@ def _get_result_tail_class_detection(
         num_samples_per_class = class_size.predict_num_samples_per_class(class_sizes_pred)
         max_K = class_size.predict_max_K(num_samples_per_class)
 
-
         is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
     elif method_name == "if":
@@ -300,30 +297,30 @@ def _get_result_tail_class_detection(
         class_sizes_pred = torch.FloatTensor(
             np.array([cluster_counts[label] for label in labels])
         )
-    elif method_name == "dbscan_tunned":  # cheating
-        from sklearn.cluster import DBSCAN
+    # elif method_name == "dbscan_tunned":  # cheating
+    #     from sklearn.cluster import DBSCAN
 
-        X = F.normalize(gaps, dim=-1).numpy()
-        dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
-        labels = dbscan.labels_
-        is_tail_pred = torch.from_numpy(labels == -1).long()
-        tail_scores = is_tail_pred.float()
-        cluster_counts = Counter(labels)
-        class_sizes_pred = torch.FloatTensor(
-            np.array([cluster_counts[label] for label in labels])
-        )
-    elif method_name == "dbscan_tunned_elbow":  # cheating
-        from sklearn.cluster import DBSCAN
+    #     X = F.normalize(gaps, dim=-1).numpy()
+    #     dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
+    #     labels = dbscan.labels_
+    #     is_tail_pred = torch.from_numpy(labels == -1).long()
+    #     tail_scores = is_tail_pred.float()
+    #     cluster_counts = Counter(labels)
+    #     class_sizes_pred = torch.FloatTensor(
+    #         np.array([cluster_counts[label] for label in labels])
+    #     )
+    # elif method_name == "dbscan_tunned_elbow":  # cheating
+    #     from sklearn.cluster import DBSCAN
 
-        X = F.normalize(gaps, dim=-1).numpy()
-        dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
-        labels = dbscan.labels_
-        cluster_counts = Counter(labels)
-        class_sizes_pred = torch.FloatTensor(
-            np.array([cluster_counts[label] for label in labels])
-        )
-        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
-        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    #     X = F.normalize(gaps, dim=-1).numpy()
+    #     dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
+    #     labels = dbscan.labels_
+    #     cluster_counts = Counter(labels)
+    #     class_sizes_pred = torch.FloatTensor(
+    #         np.array([cluster_counts[label] for label in labels])
+    #     )
+    #     tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+    #     is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
     elif method_name == "dbscan_adaptive":
         from sklearn.cluster import DBSCAN
 
@@ -365,7 +362,7 @@ def _get_result_tail_class_detection(
             np.array([cluster_counts[label] for label in labels])
         ).float()
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
-        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred, percentile=1)
     elif method_name == "gmm":
         from sklearn.mixture import GaussianMixture
 
@@ -377,17 +374,17 @@ def _get_result_tail_class_detection(
             np.array([cluster_counts[label] for label in labels])
         ).float()
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
-        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred, percentile=1)
     elif method_name == "kde":
         from sklearn.neighbors import KernelDensity
         gaps = F.normalize(gaps, dim=-1)
         X = gaps.numpy()
         kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(X)
         log_densities = kde.score_samples(X)
-        log_densities_torch = torch.from_numpy(log_densities).float()
-        tail_scores = -log_densities_torch
+        log_densities = torch.from_numpy(log_densities).float()
+        tail_scores = -log_densities
         class_sizes_pred = torch.zeros_like(tail_scores)
-        is_tail_pred = torch.zeros_like(class_sizes_pred).long()
+        is_tail_pred = (log_densities < class_size.elbow(log_densities, quantize=True)).long()
 
     elif method_name == "affprop":  # affinity propagation
         from sklearn.cluster import AffinityPropagation
@@ -708,7 +705,7 @@ def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
     return avg_df
 
 
-def analyze(data="mvtec_all", type="gap", seeds: list=[101]):
+def analyze(data="mvtec_all", type="gap", seeds: list=list(range(101,106))):
 
     data_names = get_data_names(data, seeds=seeds,)
 
@@ -723,7 +720,7 @@ def analyze(data="mvtec_all", type="gap", seeds: list=[101]):
 
     for config_name in config_names:
         for data_name in data_names:
-
+            print(f"config: {config_name} data: {data_name}")
             extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
 
             if type == "gap":
@@ -747,22 +744,18 @@ def analyze(data="mvtec_all", type="gap", seeds: list=[101]):
     avg_df.to_csv(f"./logs/analysis-{data}-{type}.csv", index=False)
 
 
-def get_data_names(data: str, seeds: list = [200]):
-
-    # seeds = list(range(101, 106))
-    # seeds = [101]
-    # seeds = [200, 201]
+def get_data_names(data: str, seeds: list):
 
     mvtec_data_base_names = [
         "mvtec_step_random_nr10_tk1_tr60",
         "mvtec_step_random_nr10_tk4_tr60",
-        "mvtec_pareto_random_nr10_tk1_tr60",
+        "mvtec_pareto_random_nr10",
     ]
 
     visa_data_base_names = [
         "visa_step_random_nr05_tk1_tr60",
         "visa_step_random_nr05_tk4_tr60",
-        "visa_pareto_random_nr05_tk1_tr60",
+        "visa_pareto_random_nr05",
     ]
 
     if data == "mvtec_all":
@@ -800,10 +793,12 @@ def get_data_names(data: str, seeds: list = [200]):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
+    analyze(data="visa_all", type="gap", seeds=list(range(200, 221)))
+    analyze(data="mvtec_all", type="gap")
     # analyze(data="mvtec_step_tk4", type="gap")
     # analyze(data="mvtec_step_tk1", type="gap")   
     # analyze(data="mvtec_step_pareto", type="gap")
     # analyze(data="mvtec_step_tk4", type="patch")
     # analyze(data="mvtec_step_tk1", type="patch")
     # analyze(data="mvtec_step_pareto", type="patch")
-    analyze(data="visa_step_tk4", type="gap", seeds=[200, 201])
+    

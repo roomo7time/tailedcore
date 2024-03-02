@@ -28,7 +28,7 @@ from src.patch_maker import PatchMaker
 
 
 def extract_artifacts(args):
-    args.batch_size = 4
+    args.batch_size = 64
     assert args.data_format == "mvtec-multiclass"
 
     utils.set_seed(args.config.seed)
@@ -69,14 +69,15 @@ def extract_artifacts(args):
         save_extracted_dir, f"extracted_train_{_train_dataloader.name}.pt"
     )
 
-    artifacts = _extract_artifacts(_train_dataloader, feature_extractor, transform_mask)
+    if not os.path.exists(extracted_path_train):
+        artifacts = _extract_artifacts(_train_dataloader, feature_extractor, transform_mask)
 
-    artifacts["feature_map_shape"] = feature_map_shape
+        artifacts["feature_map_shape"] = feature_map_shape
 
-    print("Saving artifacts...")
-    os.makedirs(os.path.dirname(extracted_path_train), exist_ok=True)
-    torch.save(artifacts, extracted_path_train)
-    print("Artifacts have been saved...")
+        print("Saving artifacts...")
+        os.makedirs(os.path.dirname(extracted_path_train), exist_ok=True)
+        torch.save(artifacts, extracted_path_train)
+        print("Artifacts have been saved...")
 
 
 def _extract_artifacts(
