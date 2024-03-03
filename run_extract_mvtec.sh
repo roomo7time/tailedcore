@@ -16,7 +16,7 @@ for seed in {101..105}; do
     DATA_NAMES=(
         "mvtec_step_random_nr10_tk1_tr60_seed${seed}"
         "mvtec_step_random_nr10_tk4_tr60_seed${seed}"
-        "mvtec_pareto_random_nr10_seed_seed${seed}"
+        "mvtec_pareto_random_nr10_seed${seed}"
     )
 
     # Process each data name with each config name
