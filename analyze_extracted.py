@@ -210,17 +210,17 @@ def _evaluate_tail_class_detection(
 ):
 
     method_names = [
+        "acs-trim_min-none",
+        "acs-trim_min-mode",
+        "acs-trim_min-mean",
         "acs-half_min-none",
         "acs-half_min-mode",
         "acs-half_min-mean",
+        "acs-ruled_max_step-none",
+        "acs-ruled_max_step-mode",
+        "acs-ruled_max_step-mean",
         "acs-max_step-none",
-        # "acs-max_step-mode",
         "acs-double_max_step-none",
-        # "acs-double_max_step-mode",
-        # "acs-double_min_bin_count-none",
-        # "acs-double_min_bin_count-mode",
-        # "acs-min_kde-none",
-        # "acs-double_min_kde-none",
         "scs_symmin",
         "scs_indep",
         "lof",
@@ -791,10 +791,10 @@ def get_data_names(data: str, seeds: list):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
-    seeds_visa = list(range(200,219))
+    # seeds_visa = list(range(200,205))
     seeds_mvtec = [101, 102, 103, 104, 105]
     analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
-    analyze(data="visa_all", type="gap", seeds=seeds_visa)
+    # analyze(data="visa_all", type="gap", seeds=seeds_visa)
     # analyze(data="mvtec_step_tk4", type="gap", seeds=seeds_mvtec)
     # analyze(data="mvtec_step_tk1", type="gap", seeds=seeds_mvtec)   
     # analyze(data="mvtec_step_pareto", type="gap", seeds=seeds_mvtec)
