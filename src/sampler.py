@@ -660,7 +660,7 @@ class TailedLOFSampler(LOFSampler):
 class AdaptiveTailSampler(BaseSampler):
     def __init__(
         self,
-        th_type: str = "max_step_min_num_neighbors",
+        th_type: str = "double_max_step",
         vote_type: str = "none",
     ):
         self.th_type = th_type

@@ -128,6 +128,7 @@ def _predict_max_K_max_within_percnetile(num_samples_per_class: torch.Tensor, p=
         k += 1
 
     max_K_idx = len(cum_den) - k
+    max_K_idx = min(max_K_idx, len(num_samples_per_class)-1)
 
     max_K = num_samples_per_class[max_K_idx]
     return max_K.item()

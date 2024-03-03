@@ -19,6 +19,7 @@ from .sampler import (
     IncrementalGreedyCoresetSampler,
     GreedyCoresetSampler,
     TailSampler,
+    AdaptiveTailSampler,
     TailedLOFSampler,
     LOFSampler
 )
@@ -754,7 +755,12 @@ class AATailedPatch(BaseCore):
             brute=brute,
         )
 
-        self.tail_sampler = TailSampler(th_type='symmin')
+        assert tail_th_type in ['symmin', 'adaptive_double_max_step']
+        if tail_th_type:
+            self.tail_sampler = TailSampler(th_type=tail_th_type)
+        else:
+            self.tail_sampler = AdaptiveTailSampler(th_type=tail_th_type)
+
         if tail_lof:
             self.noise_discriminator = TailedLOFSampler(
                 device=device if sampler_on_gpu else torch.device("cpu"),

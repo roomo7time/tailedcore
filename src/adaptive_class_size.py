@@ -56,10 +56,17 @@ def _compute_ths(self_sim: torch.Tensor, th_type) -> torch.Tensor:
 
     if th_type == "max_step":
         _compute_th = _compute_th_max_step
-    elif th_type == "max_step_min_num_neighbors":
-        _compute_th = _compute_th_max_step_min_num_neighbors
     elif th_type == "double_max_step":
         _compute_th = _compute_th_double_max_step
+    elif th_type == "max_step_min_num_neighbors":
+        _compute_th = _compute_th_max_step_min_num_neighbors
+    elif th_type == "double_min_bin_count":
+        _compute_th = _compute_th_double_min_bin_count
+    elif th_type == "min_kde":
+        _compute_th = _compute_th_min_kde
+    elif th_type == "double_min_kde":
+        _compute_th = _compute_th_double_min_kde
+    
 
     n = len(self_sim)
     ths = [[]] * n
@@ -88,26 +95,83 @@ def _compute_th_max_step(scores: np.ndarray):
 
     return th
 
+# TODO: keep it in case
+# def _compute_th_double_max_step(scores: np.ndarray):
+#     scores_sorted = _sort(scores, descending=False)
+#     diff = np.diff(scores_sorted)
+
+#     crit1 = diff
+
+#     crit2 = np.empty_like(crit1)
+#     for i in range(len(crit2) - 1):
+#         crit2[i] = np.max(crit1[i + 1 :])
+
+#     # crit2[-1] = diff[-1]
+#     crit2[-1] = crit1.mean()
+
+#     crit = crit1 / np.maximum(crit2, 1e-7)
+
+#     idx_max_step = crit.argmax()
+
+#     th = (scores_sorted[idx_max_step] + scores_sorted[idx_max_step + 1]) / 2
+
+#     return th
 
 def _compute_th_double_max_step(scores: np.ndarray):
     scores_sorted = _sort(scores, descending=False)
-    diff = np.diff(scores_sorted)
+    diffs = np.diff(scores_sorted)
 
-    crit1 = diff
-
-    crit2 = np.empty_like(crit1)
-    for i in range(len(crit2) - 1):
-        crit2[i] = np.max(diff[i + 1 :])
-
-    crit2[-1] = diff[-1]
-
-    crit = crit1 / np.maximum(crit2, 1e-7)
-
-    idx_max_step = crit.argmax()
+    idx_max_step = _double_criterion(diffs)
 
     th = (scores_sorted[idx_max_step] + scores_sorted[idx_max_step + 1]) / 2
 
     return th
+
+def _double_criterion(crits: np.ndarray):
+
+    next_crits = np.empty_like(crits)
+    for i in range(len(next_crits) - 1):
+        next_crits[i] = np.max(crits[i + 1 :])
+
+    next_crits[-1] = crits[-1]
+
+    final_crits = crits / np.maximum(next_crits, 1e-7)
+
+    idx_max_crit = final_crits.argmax()
+
+    return idx_max_crit
+
+def _compute_th_double_min_bin_count(scores: np.ndarray):
+    scores_sorted = _sort(scores, descending=False)
+    bin_counts = scores_to_bin_counts(scores_sorted)[:-1]
+    idx = _double_criterion(bin_counts.max() - bin_counts)
+
+    th = (scores_sorted[idx] + scores_sorted[idx + 1]) / 2
+
+    return th
+
+
+def _compute_th_min_kde(scores: np.ndarray):
+    scores_sorted = _sort(scores, descending=False)
+    kde_log_density = scores_to_kde(scores_sorted)[:-1]
+
+    idx = kde_log_density.argmin()
+
+    th = (scores_sorted[idx] + scores_sorted[idx + 1]) / 2
+
+    return th
+
+
+def _compute_th_double_min_kde(scores: np.ndarray):
+    scores_sorted = _sort(scores, descending=False)
+    kde_log_density = scores_to_kde(scores_sorted)[:-1]
+
+    idx = _double_criterion(kde_log_density.max() - kde_log_density)
+
+    th = (scores_sorted[idx] + scores_sorted[idx + 1]) / 2
+
+    return th
+
 
 
 def _compute_th_max_step_min_num_neighbors(scores: np.ndarray):
@@ -124,6 +188,8 @@ def _compute_th_max_step_min_num_neighbors(scores: np.ndarray):
     th = (scores_sorted[idx_max_step] + scores_sorted[idx_max_step + 1]) / 2
 
     return th
+
+
 
 
 def _sort(scores: np.ndarray, descending: bool = False, quantize=True) -> np.ndarray:
@@ -160,3 +226,46 @@ def adaptively_sample_few_shot(
     sample_indices = torch.where(is_few_shot == 1)[0]
 
     return X[sample_indices], sample_indices
+
+
+def scores_to_bin_counts(scores):
+    # Calculate IQR
+    Q1 = np.percentile(scores, 25)
+    Q3 = np.percentile(scores, 75)
+    IQR = Q3 - Q1
+    
+    # Number of data points
+    n = len(scores)
+    
+    # Freedman-Diaconis Rule for bin width
+    bin_width = 2 * IQR / (n ** (1/3))
+    
+    # Calculate the number of bins
+    data_range = np.max(scores) - np.min(scores)
+    num_bins = int(np.round(data_range / bin_width))
+    
+    # Compute histogram bins
+    hist, bin_edges = np.histogram(scores, bins=num_bins)
+    
+    bin_counts = np.zeros_like(scores)
+    for i in range(num_bins):
+        if i < num_bins -1 :
+            in_bin = (scores >= bin_edges[i]) & (scores < bin_edges[i+1])
+        else:
+            in_bin = (scores >= bin_edges[i])
+        bin_counts[in_bin] = hist[i]
+    
+    return bin_counts
+
+
+from sklearn.neighbors import KernelDensity
+def scores_to_kde(scores,):
+    scores = np.array(scores).reshape(-1, 1)
+    
+    # Fit the KDE model
+    kde = KernelDensity(kernel='tophat', bandwidth='silverman').fit(scores)
+    
+    # Evaluate the log density of the input scores
+    log_density = kde.score_samples(scores)
+
+    return log_density
