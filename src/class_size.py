@@ -5,9 +5,11 @@ import numpy as np
 import torch.nn.functional as F
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from scipy.stats import mode
+
 from . import utils
 
-from scipy.stats import mode
+
 
 
 def compute_self_sim(X: torch.Tensor, normalize: bool = True) -> torch.Tensor:

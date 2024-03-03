@@ -16,6 +16,7 @@ from joblib import Parallel, delayed
 
 import src.evaluator.result as result
 import src.class_size as class_size
+import src.adaptive_class_size as adaptive_class_size
 import src.helpers.cv2plot as cv2plot
 
 from src import utils
@@ -26,7 +27,7 @@ from src.backbone import get_backbone
 from src.feature_embedder import FeatureEmbedder
 
 from src.patch_maker import PatchMaker
-from src.sampler import LOFSampler, TailSampler, TailedLOFSampler
+from src.sampler import LOFSampler, TailSampler, TailedLOFSampler, AdaptiveTailSampler
 
 
 def analyze_patch(extracted_path: str, data_name: str, config_name: str):
@@ -166,7 +167,10 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
     utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
 
     num_classes = len(set(class_names))
-
+    # save_plot_dir = os.path.join("./artifacts", data_name, config_name)
+    # print(f"save_plot_dir: {save_plot_dir}")
+    # plot_gap_analysis(gaps, masks, class_names, class_sizes, num_classes, save_plot_dir)
+    # return
     df = get_gap_result_df(
         gaps,
         masks,
@@ -175,6 +179,7 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
         num_classes,
         save_log_dir,
     )
+    
     return df
 
 
@@ -205,6 +210,10 @@ def _evaluate_tail_class_detection(
 ):
 
     method_names = [
+        "acs-max_step-none",
+        "acs-max_step-mode",
+        "acs-double_max_step-none",
+        "acs-double_max_step-mode",
         "scs_symmin",
         "scs_indep",
         "lof",
@@ -247,12 +256,21 @@ def _get_result_tail_class_detection(
     gaps: torch.Tensor,
 ):
 
-    if method_name == "lof":
-        lof_sampler = LOFSampler()
-        _, head_indices, tail_scores = lof_sampler.run(gaps, return_outlier_scores=True)
-        is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
-        is_tail_pred = 1 - is_head_pred
-        class_sizes_pred = torch.zeros((len(gaps)))
+    if "acs" in method_name:
+        self_sim = class_size.compute_self_sim(gaps)
+        method_parts = method_name.split("-")
+        th_type = method_parts[1]
+        vote_type = method_parts[2]
+        tail_sampler = AdaptiveTailSampler(th_type=th_type, vote_type=vote_type)
+        _, tail_indices, class_sizes_pred = tail_sampler.run(
+            gaps, return_class_sizes=True
+        )
+        
+        num_samples_per_class = class_size.predict_num_samples_per_class(class_sizes_pred)
+        max_K = class_size.predict_max_K(num_samples_per_class)
+
+        is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
     elif "scs" in method_name:
         method_parts = method_name.split("_")
         th_type = method_parts[1]
@@ -267,6 +285,12 @@ def _get_result_tail_class_detection(
 
         is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+    elif method_name == "lof":
+        lof_sampler = LOFSampler()
+        _, head_indices, tail_scores = lof_sampler.run(gaps, return_outlier_scores=True)
+        is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
+        is_tail_pred = 1 - is_head_pred
+        class_sizes_pred = torch.zeros((len(gaps)))
     elif method_name == "if":
         from sklearn.ensemble import IsolationForest
 
@@ -297,30 +321,7 @@ def _get_result_tail_class_detection(
         class_sizes_pred = torch.FloatTensor(
             np.array([cluster_counts[label] for label in labels])
         )
-    # elif method_name == "dbscan_tunned":  # cheating
-    #     from sklearn.cluster import DBSCAN
-
-    #     X = F.normalize(gaps, dim=-1).numpy()
-    #     dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
-    #     labels = dbscan.labels_
-    #     is_tail_pred = torch.from_numpy(labels == -1).long()
-    #     tail_scores = is_tail_pred.float()
-    #     cluster_counts = Counter(labels)
-    #     class_sizes_pred = torch.FloatTensor(
-    #         np.array([cluster_counts[label] for label in labels])
-    #     )
-    # elif method_name == "dbscan_tunned_elbow":  # cheating
-    #     from sklearn.cluster import DBSCAN
-
-    #     X = F.normalize(gaps, dim=-1).numpy()
-    #     dbscan = DBSCAN(min_samples=1, eps=np.cos(np.pi / 4)).fit(X)
-    #     labels = dbscan.labels_
-    #     cluster_counts = Counter(labels)
-    #     class_sizes_pred = torch.FloatTensor(
-    #         np.array([cluster_counts[label] for label in labels])
-    #     )
-    #     tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
-    #     is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    
     elif method_name == "dbscan_adaptive":
         from sklearn.cluster import DBSCAN
 
@@ -613,7 +614,7 @@ def plot_patch_analysis(feas: torch.Tensor, masks, save_dir, save_plot=True):
 
 
 def plot_gap_analysis(
-    gaps, masks, class_names, class_sizes, num_classes, save_dir, save_plot=True
+    gaps, masks, class_names, class_sizes, num_classes, save_dir
 ):
 
     if gaps.ndim == 4:
@@ -624,54 +625,46 @@ def plot_gap_analysis(
 
     is_anomaly_gt = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
 
-    _evaluate_tail_class_detection(
-        gaps=gaps,
-        class_sizes_gt=class_sizes,
-        is_anomaly_gt=is_anomaly_gt,
-        num_classes=num_classes,
-        save_dir=save_dir,
-    )
+    _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
+    _few_shot_labels = (class_sizes < 20).tolist()
+    save_plot_dir = os.path.join(save_dir, "plot_gap")
 
-    # FIXME:
-    if save_plot:
+    self_sim = class_size.compute_self_sim(gaps)
+    class_sizes_pred = adaptive_class_size.predict_adaptive_class_sizes(self_sim)
 
-        _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
-        _few_shot_labels = (class_sizes < 20).tolist()
-        save_plot_dir = os.path.join(save_dir, "plot_gap")
+    self_sim_abnormal_plot_dir = os.path.join(save_plot_dir, "self_sim_abnormal")
+    self_sim_few_shot_plot_dir = os.path.join(save_plot_dir, "self_sim_few_shot")
+    self_sim_else_plot_dir = os.path.join(save_plot_dir, "self_sim_else")
+    os.makedirs(self_sim_abnormal_plot_dir, exist_ok=True)
+    os.makedirs(self_sim_few_shot_plot_dir, exist_ok=True)
+    os.makedirs(self_sim_else_plot_dir, exist_ok=True)
 
-        self_sim = class_size.compute_self_sim(gaps)
+    ths = adaptive_class_size._compute_ths(self_sim, "double_max_step")
 
-        self_sim_abnormal_plot_dir = os.path.join(save_plot_dir, "self_sim_abnormal")
-        self_sim_few_shot_plot_dir = os.path.join(save_plot_dir, "self_sim_few_shot")
-        self_sim_else_plot_dir = os.path.join(save_plot_dir, "self_sim_else")
-        os.makedirs(self_sim_abnormal_plot_dir, exist_ok=True)
-        os.makedirs(self_sim_few_shot_plot_dir, exist_ok=True)
-        os.makedirs(self_sim_else_plot_dir, exist_ok=True)
+    def plot_gap_self_sim(index):
+        # print(f"plotting ngap for {index}")
+        _scores = self_sim[index].numpy()
+        _is_anomaly = _anomaly_labels[index]
+        _is_few_shot = _few_shot_labels[index]
+        if _is_anomaly:
+            _filename = os.path.join(self_sim_abnormal_plot_dir, f"{index:04d}-{class_names[index]}.jpg")
+        elif _is_few_shot:
+            _filename = os.path.join(self_sim_few_shot_plot_dir, f"{index:04d}-{class_names[index]}.jpg")
+        else:
+            _filename = os.path.join(self_sim_else_plot_dir, f"{index:04d}-{class_names[index]}.jpg")
+        plot_scatter(
+            _scores,
+            class_labels,
+            class_label_names,
+            is_anomaly_gt,
+            th=ths[index].item(),
+            filename=_filename,
+        )
 
-        def plot_gap_self_sim(index):
-            print(f"plotting ngap for {index}")
-            _scores = self_sim[index].numpy()
-            _is_anomaly = _anomaly_labels[index]
-            _is_few_shot = _few_shot_labels[index]
-            if _is_anomaly:
-                _filename = os.path.join(self_sim_abnormal_plot_dir, f"{index:04d}.jpg")
-            elif _is_few_shot:
-                _filename = os.path.join(self_sim_few_shot_plot_dir, f"{index:04d}.jpg")
-            else:
-                _filename = os.path.join(self_sim_else_plot_dir, f"{index:04d}.jpg")
-            plot_scatter(
-                _scores,
-                class_labels,
-                class_label_names,
-                is_anomaly_gt,
-                th=np.cos(np.pi / 4),
-                filename=_filename,
-            )
+    Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
 
-        # Parallel(n_jobs=-1)(delayed(plot_gap_self_sim)(i) for i in range(len(self_sim)))
-
-        for i in range(len(self_sim)):
-            plot_gap_self_sim(i)
+    # for i in range(len(self_sim)):
+    #     plot_gap_self_sim(i)
 
 
 import pandas as pd
@@ -793,9 +786,10 @@ def get_data_names(data: str, seeds: list):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
-    analyze(data="visa_all", type="gap", seeds=list(range(200, 221)))
-    analyze(data="mvtec_all", type="gap")
-    # analyze(data="mvtec_step_tk4", type="gap")
+    analyze(data="visa_all", type="gap", seeds=[200, 201, 202, 203, 204])
+    # analyze(data="visa_step_tk4", type="gap", seeds=[200])
+    analyze(data="mvtec_all", type="gap", seeds=[101, 102, 103, 104, 105])
+    # analyze(data="mvtec_step_tk4", type="gap", seeds=[101])
     # analyze(data="mvtec_step_tk1", type="gap")   
     # analyze(data="mvtec_step_pareto", type="gap")
     # analyze(data="mvtec_step_tk4", type="patch")

@@ -9,7 +9,7 @@ from typing import Union
 from tqdm import tqdm
 from copy import deepcopy
 from sklearn.neighbors import LocalOutlierFactor
-from . import class_size, utils
+from . import class_size, utils, adaptive_class_size
 
 
 class BaseSampler(abc.ABC):
@@ -655,3 +655,38 @@ class TailedLOFSampler(LOFSampler):
 
         return sample_indices, outlier_scores
 
+
+
+class AdaptiveTailSampler(BaseSampler):
+    def __init__(
+        self,
+        th_type: str = "max_step_min_num_neighbors",
+        vote_type: str = "none",
+    ):
+        self.th_type = th_type
+        self.vote_type = vote_type
+
+    def run(self, 
+            features: torch.Tensor, 
+            feature_map_shape: torch.Tensor = None,
+            return_class_sizes: bool = False,):
+
+        assert feature_map_shape is None
+
+        tail_samples, tail_indices = adaptive_class_size.adaptively_sample_few_shot(
+            X=features,
+            th_type=self.th_type,
+            vote_type=self.vote_type,
+        )
+
+        if return_class_sizes:
+            class_sizes_pred = adaptive_class_size.adaptively_sample_few_shot(
+                X=features,
+                th_type=self.th_type,
+                vote_type=self.vote_type,
+                return_class_sizes=True
+            )
+
+            return tail_samples, tail_indices, class_sizes_pred
+
+        return tail_samples, tail_indices
