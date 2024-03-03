@@ -66,6 +66,8 @@ def _compute_ths(self_sim: torch.Tensor, th_type) -> torch.Tensor:
         _compute_th = _compute_th_min_kde
     elif th_type == "double_min_kde":
         _compute_th = _compute_th_double_min_kde
+    elif th_type == "half_min":
+        _compute_th = _compute_th_half_min
     
 
     n = len(self_sim)
@@ -169,6 +171,12 @@ def _compute_th_double_min_kde(scores: np.ndarray):
     idx = _double_criterion(kde_log_density.max() - kde_log_density)
 
     th = (scores_sorted[idx] + scores_sorted[idx + 1]) / 2
+
+    return th
+
+def _compute_th_half_min(scores: np.ndarray):
+    m = scores.min()
+    th = np.cos(np.arccos(m) / 2)
 
     return th
 
