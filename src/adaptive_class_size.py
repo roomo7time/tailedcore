@@ -68,6 +68,10 @@ def _compute_ths(self_sim: torch.Tensor, th_type) -> torch.Tensor:
         _compute_th = _compute_th_double_min_kde
     elif th_type == "half_min":
         _compute_th = _compute_th_half_min
+    elif th_type == "ruled_max_step":
+        _compute_th = _compute_th_ruled_max_step
+    elif th_type == "trim_min":
+        _compute_th = _compute_th_trim_min
     
 
     n = len(self_sim)
@@ -78,10 +82,10 @@ def _compute_ths(self_sim: torch.Tensor, th_type) -> torch.Tensor:
         _th = _compute_th(_sim)
         return _th
 
-    # for i in range(n):
-    #     ths[i] = compute_th(i)
+    for i in range(n):
+        ths[i] = compute_th(i)
 
-    ths = Parallel(n_jobs=-1)(delayed(compute_th)(i) for i in range(n))
+    # ths = Parallel(n_jobs=-1)(delayed(compute_th)(i) for i in range(n))
 
     ths = torch.FloatTensor(ths)[:, None]
     return ths
@@ -179,6 +183,29 @@ def _compute_th_half_min(scores: np.ndarray):
     th = np.cos(np.arccos(m) / 2)
 
     return th
+
+def _compute_th_trim_min(scores: np.ndarray):
+    scores = _sort(scores, descending=False)
+    m = scores.min()
+    th_half = np.cos(np.arccos(m)/2)
+    scores_half = scores[scores>th_half]
+
+    p = 0.85
+    scores_trim = scores_half[-int(len(scores_half) * p)]
+    th = scores_trim
+    return th
+
+def _compute_th_ruled_max_step(scores: np.ndarray):
+    m = scores.min()
+    th_quarter = np.cos(np.arccos(m) / 8)
+    th_half = np.cos(np.arccos(m) / 2)
+
+    th_double_max_step = _compute_th_double_max_step(scores)
+
+    if th_double_max_step >= th_quarter:
+        return th_half
+    
+    return th_double_max_step
 
 
 
