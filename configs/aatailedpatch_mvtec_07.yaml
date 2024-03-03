@@ -12,7 +12,7 @@ model:
   embedding_to_extract_from: "avgpool"
 
   coreset_model_name: "aatailedpatch"
-  tail_th_type: "adaptive_double_max_step"
+  tail_th_type: "double_max_step"
   tail_data_augment_type: 'rotflip'
   tail_lof: false
 
