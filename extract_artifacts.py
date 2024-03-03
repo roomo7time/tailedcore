@@ -39,6 +39,25 @@ def extract_artifacts(args):
 
     input_shape = (3, config.data.inputsize, config.data.inputsize)
 
+    dataloaders = get_dataloaders(
+        config.data,
+        data_format=args.data_format,
+        data_path=args.data_path,
+        batch_size=args.batch_size,
+    )
+
+    _train_dataloader = dataloaders[0]["train"]
+    _test_dataloader = dataloaders[0]["test"]
+
+    save_extracted_dir = os.path.join("./artifacts", args.data_name, args.config_name)
+
+    extracted_path_train = os.path.join(
+        save_extracted_dir, f"extracted_train_{_train_dataloader.name}.pt"
+    )
+
+    if os.path.exists(extracted_path_train):
+        return
+
     backbone = get_backbone(args.config.model.backbone_names[0])
 
     feature_extractor = FeatureEmbedder(
@@ -52,32 +71,17 @@ def extract_artifacts(args):
     feature_extractor.eval()
     feature_map_shape = feature_extractor.get_feature_map_shape()
 
-    dataloaders = get_dataloaders(
-        config.data,
-        data_format=args.data_format,
-        data_path=args.data_path,
-        batch_size=args.batch_size,
-    )
-
-    _train_dataloader = dataloaders[0]["train"]
-    _test_dataloader = dataloaders[0]["test"]
+    
     transform_mask = _test_dataloader.dataset.transform_mask
+    
+    artifacts = _extract_artifacts(_train_dataloader, feature_extractor, transform_mask)
 
-    save_extracted_dir = os.path.join("./artifacts", args.data_name, args.config_name)
+    artifacts["feature_map_shape"] = feature_map_shape
 
-    extracted_path_train = os.path.join(
-        save_extracted_dir, f"extracted_train_{_train_dataloader.name}.pt"
-    )
-
-    if not os.path.exists(extracted_path_train):
-        artifacts = _extract_artifacts(_train_dataloader, feature_extractor, transform_mask)
-
-        artifacts["feature_map_shape"] = feature_map_shape
-
-        print("Saving artifacts...")
-        os.makedirs(os.path.dirname(extracted_path_train), exist_ok=True)
-        torch.save(artifacts, extracted_path_train)
-        print("Artifacts have been saved...")
+    print("Saving artifacts...")
+    os.makedirs(os.path.dirname(extracted_path_train), exist_ok=True)
+    torch.save(artifacts, extracted_path_train)
+    print("Artifacts have been saved...")
 
 
 def _extract_artifacts(
