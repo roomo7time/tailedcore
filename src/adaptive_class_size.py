@@ -212,7 +212,7 @@ def _sort(scores: np.ndarray, descending: bool = False, quantize=True) -> np.nda
 
 def adaptively_sample_few_shot(
     X: torch.Tensor,
-    th_type: str = "max_step_min_num_neighbors",
+    th_type: str = "double_max_step",
     vote_type: str = "none",
     return_class_sizes=False,
 ):

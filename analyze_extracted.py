@@ -719,22 +719,24 @@ def analyze(data="mvtec_all", type="gap", seeds: list=list(range(101,106))):
         for data_name in data_names:
             print(f"config: {config_name} data: {data_name}")
             extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
-
-            if type == "gap":
-                _df = analyze_gap(
-                    extracted_path=extracted_path,
-                    data_name=data_name,
-                    config_name=config_name,
-                )
-            elif type == "patch":
-                _df = analyze_patch(
-                    extracted_path=extracted_path,
-                    data_name=data_name,
-                    config_name=config_name,
-                )
-            else:
-                raise NotImplementedError()
-            dfs.append(_df)
+            try:
+                if type == "gap":
+                    _df = analyze_gap(
+                        extracted_path=extracted_path,
+                        data_name=data_name,
+                        config_name=config_name,
+                    )
+                elif type == "patch":
+                    _df = analyze_patch(
+                        extracted_path=extracted_path,
+                        data_name=data_name,
+                        config_name=config_name,
+                    )
+                else:
+                    raise NotImplementedError()
+                dfs.append(_df)
+            except:
+                pass
 
     avg_df = average_dfs(dfs)
     os.makedirs("./logs", exist_ok=True)
@@ -763,8 +765,6 @@ def get_data_names(data: str, seeds: list):
         data_base_names = [mvtec_data_base_names[1]]
     elif data == "mvtec_step_pareto":
         data_base_names = [mvtec_data_base_names[2]]
-    elif data == "":
-        data_base_names = [mvtec_data_base_names[2]]
     elif data == "visa_all":
         data_base_names = visa_data_base_names
     elif data == "visa_step_tk1":
@@ -772,8 +772,6 @@ def get_data_names(data: str, seeds: list):
     elif data == "visa_step_tk4":
         data_base_names = [visa_data_base_names[1]]
     elif data == "visa_step_pareto":
-        data_base_names = [visa_data_base_names[2]]
-    elif data == "":
         data_base_names = [visa_data_base_names[2]]
     else:
         raise NotImplementedError()
@@ -790,9 +788,9 @@ def get_data_names(data: str, seeds: list):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
-    seeds_visa = [200, 201, 202, 203, 204]
+    seeds_visa = list(range(200,239))
     seeds_mvtec = [101, 102, 103, 104, 105]
-    analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
+    # analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
     analyze(data="visa_all", type="gap", seeds=seeds_visa)
     # analyze(data="mvtec_step_tk4", type="gap", seeds=seeds_mvtec)
     # analyze(data="mvtec_step_tk1", type="gap", seeds=seeds_mvtec)   
