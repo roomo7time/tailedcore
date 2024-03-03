@@ -4,7 +4,7 @@ For research only
 
 import os
 import torch
-import time
+import math
 import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -210,6 +210,9 @@ def _evaluate_tail_class_detection(
 ):
 
     method_names = [
+        "datamax",
+        "data_double_max",
+        "data_hard_max",
         "acs-trim_min-none",
         "acs-trim_min-mode",
         "acs-trim_min-mean",
@@ -266,7 +269,35 @@ def _get_result_tail_class_detection(
     gaps: torch.Tensor,
 ):
 
-    if "acs" in method_name:
+    if method_name == "datamax":
+        self_sim = class_size.compute_self_sim(gaps)
+        
+        tail_scores = torch.diag(F.softmax(gaps.norm(dim=1).mean() * self_sim, dim=-1))
+        
+        th = adaptive_class_size._compute_th_max_step(tail_scores.numpy())
+        is_tail_pred = (tail_scores >= th).long()
+        # utils.plot_scores(np.sort(tail_scores.numpy()), alpha=1, markersize=2.5)
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    elif method_name == "data_double_max":
+        self_sim = class_size.compute_self_sim(gaps)
+        
+        tail_scores = torch.diag(F.softmax(gaps.norm(dim=1).mean() * self_sim, dim=-1))
+        
+        th = -adaptive_class_size._compute_th_double_max_step(-tail_scores.numpy())
+        is_tail_pred = (tail_scores >= th).long()
+        # utils.plot_scores(np.sort(tail_scores.numpy()), alpha=1, markersize=2.5)
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    
+    elif method_name == "data_hard_max":
+        self_sim = class_size.compute_self_sim(gaps)
+        
+        tail_scores = torch.diag(F.softmax(gaps.norm(dim=1).mean() * self_sim, dim=-1))
+        
+        is_tail_pred = (tail_scores >= 0.5).long()
+        # utils.plot_scores(np.sort(tail_scores.numpy()), alpha=1, markersize=2.5)
+        class_sizes_pred = torch.zeros_like(tail_scores)
+
+    elif "acs" in method_name:
         self_sim = class_size.compute_self_sim(gaps)
         method_parts = method_name.split("-")
         th_type = method_parts[1]
@@ -725,6 +756,7 @@ def analyze(data="mvtec_all", type="gap", seeds: list=list(range(101,106))):
         for data_name in data_names:
             print(f"config: {config_name} data: {data_name}")
             extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
+            
             try:
                 if type == "gap":
                     _df = analyze_gap(
