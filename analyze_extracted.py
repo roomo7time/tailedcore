@@ -213,6 +213,9 @@ def _evaluate_tail_class_detection(
         "acs-trim_min-none",
         "acs-trim_min-mode",
         "acs-trim_min-mean",
+        "acs-truncate_min-none",
+        "acs-truncate_min-mode",
+        "acs-truncate_min-mean",
         "acs-half_min-none",
         "acs-half_min-mode",
         "acs-half_min-mean",
@@ -791,10 +794,10 @@ def get_data_names(data: str, seeds: list):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
-    # seeds_visa = list(range(200,205))
-    seeds_mvtec = [101, 102, 103, 104, 105]
-    analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
-    # analyze(data="visa_all", type="gap", seeds=seeds_visa)
+    seeds_visa = list(range(201,210))
+    # seeds_mvtec = [101, 102, 103, 104, 105]
+    # analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
+    analyze(data="visa_all", type="gap", seeds=seeds_visa)
     # analyze(data="mvtec_step_tk4", type="gap", seeds=seeds_mvtec)
     # analyze(data="mvtec_step_tk1", type="gap", seeds=seeds_mvtec)   
     # analyze(data="mvtec_step_pareto", type="gap", seeds=seeds_mvtec)
