@@ -1,0 +1,2 @@
+method,ratio_missing_tail,ratio_included_anomaly,ratio_included_head,auroc,class_size_pred_error,tail_pred_acc
+acs-trim_min-mode,28.57142857142857,0.5555555555555556,4.761904761904762,99.95097299743551,0.2,99.7641509398818
