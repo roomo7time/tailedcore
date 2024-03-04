@@ -14,7 +14,7 @@ model:
   coreset_model_name: "aatailedpatch"
   tail_th_type: "ada_trim_min-mode"
   tail_data_augment_type: 'rot15flip'
-  tail_lof: true
+  tail_lof: false
 
   greedy_ratio: 0.1
   greedy_proj_dim: 128
