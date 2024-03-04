@@ -131,8 +131,8 @@ def _extract_artifacts(
     class_sizes = torch.cat(class_sizes)
 
     return {
-        "feas": feas,
-        "masks": masks,
+        # "feas": feas,
+        # "masks": masks,
         "gaps": gaps,
         "labels": labels,
         "class_sizes": class_sizes,

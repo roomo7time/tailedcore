@@ -153,7 +153,8 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
 
     extracted = torch.load(extracted_path)
 
-    masks = extracted["masks"]
+    # masks = extracted["masks"]
+    labels = extracted["labels"]
 
     gaps = extracted["gaps"]
     class_names = extracted["class_names"]
@@ -173,7 +174,7 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
     # return
     df = get_gap_result_df(
         gaps,
-        masks,
+        labels,
         class_names,
         class_sizes,
         num_classes,
@@ -183,14 +184,14 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
     return df
 
 
-def get_gap_result_df(gaps, masks, class_names, class_sizes, num_classes, save_dir):
+def get_gap_result_df(gaps, labels, class_names, class_sizes, num_classes, save_dir):
     if gaps.ndim == 4:
         gaps = gaps[:, :, 0, 0]
 
     class_labels, class_label_names = _convert_class_names_to_labels(class_names)
     class_labels = class_labels.numpy()
 
-    is_anomaly_gt = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
+    is_anomaly_gt = labels.to(torch.long)
 
     return _evaluate_tail_class_detection(
         gaps=gaps,
@@ -210,35 +211,35 @@ def _evaluate_tail_class_detection(
 ):
 
     method_names = [
-        "datamax",
-        "data_double_max",
-        "data_hard_max",
-        "acs-trim_min-none",
+        # "datamax",
+        # "data_double_max",
+        # "data_hard_max",
+        # "acs-trim_min-none",
         "acs-trim_min-mode",
-        "acs-trim_min-mean",
-        "acs-truncate_min-none",
-        "acs-truncate_min-mode",
-        "acs-truncate_min-mean",
-        "acs-half_min-none",
-        "acs-half_min-mode",
-        "acs-half_min-mean",
-        "acs-ruled_max_step-none",
-        "acs-ruled_max_step-mode",
-        "acs-ruled_max_step-mean",
-        "acs-max_step-none",
-        "acs-double_max_step-none",
-        "scs_symmin",
-        "scs_indep",
-        "lof",
-        "if",
-        "ocsvm",
-        "dbscan",
-        "dbscan_adaptive",
-        "dbscan_adaptive_elbow",
-        "kmeans",
-        "gmm",
-        "kde",
-        "affprop",
+        # "acs-trim_min-mean",
+        # "acs-truncate_min-none",
+        # "acs-truncate_min-mode",
+        # "acs-truncate_min-mean",
+        # "acs-half_min-none",
+        # "acs-half_min-mode",
+        # "acs-half_min-mean",
+        # "acs-ruled_max_step-none",
+        # "acs-ruled_max_step-mode",
+        # "acs-ruled_max_step-mean",
+        # "acs-max_step-none",
+        # "acs-double_max_step-none",
+        # "scs_symmin",
+        # "scs_indep",
+        # "lof",
+        # "if",
+        # "ocsvm",
+        # "dbscan",
+        # "dbscan_adaptive",
+        # "dbscan_adaptive_elbow",
+        # "kmeans",
+        # "gmm",
+        # "kde",
+        # "affprop",
     ]
 
     results = []
@@ -826,10 +827,10 @@ def get_data_names(data: str, seeds: list):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
-    seeds_visa = list(range(201,210))
-    # seeds_mvtec = [101, 102, 103, 104, 105]
-    # analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
-    analyze(data="visa_all", type="gap", seeds=seeds_visa)
+    # seeds_visa = list(range(201,210))
+    seeds_mvtec = [101, 102, 103, 104, 105]
+    analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
+    # analyze(data="visa_all", type="gap", seeds=seeds_visa)
     # analyze(data="mvtec_step_tk4", type="gap", seeds=seeds_mvtec)
     # analyze(data="mvtec_step_tk1", type="gap", seeds=seeds_mvtec)   
     # analyze(data="mvtec_step_pareto", type="gap", seeds=seeds_mvtec)
