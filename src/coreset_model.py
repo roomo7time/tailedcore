@@ -755,11 +755,13 @@ class AATailedPatch(BaseCore):
             brute=brute,
         )
 
-        assert tail_th_type in ['symmin', 'double_max_step']
+        assert tail_th_type in ['symmin', 'double_max_step', 'ada_trim_min-mode']
         if tail_th_type == 'symmin':
             self.tail_sampler = TailSampler(th_type=tail_th_type)
         elif tail_th_type == 'double_max_step':
             self.tail_sampler = AdaptiveTailSampler(th_type=tail_th_type)
+        elif tail_th_type == 'ada_trim_min-mode':
+            self.tail_sampler = AdaptiveTailSampler(th_type='trim_min', vote_type='mode')
 
         if tail_lof:
             self.noise_discriminator = TailedLOFSampler(

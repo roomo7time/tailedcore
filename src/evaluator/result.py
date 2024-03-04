@@ -92,13 +92,13 @@ def save_result(
     #         binary_masks=on_blobs.threshold_score_masks(
     #             score_masks, th_val, None))
 
-    utils.plot_score_masks(
-        save_dir_path=os.path.join(save_plot_dir, "scores"),
-        image_paths=image_paths,
-        masks_gt=masks_gt,
-        score_masks=score_masks,
-        image_scores=image_scores,
-    )
+    # utils.plot_score_masks(
+    #     save_dir_path=os.path.join(save_plot_dir, "scores"),
+    #     image_paths=image_paths,
+    #     masks_gt=masks_gt,
+    #     score_masks=score_masks,
+    #     image_scores=image_scores,
+    # )
 
     try:
         print("Computing image auroc...")

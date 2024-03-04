@@ -4,7 +4,7 @@ For research only
 
 import os
 import torch
-import time
+import math
 import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -153,7 +153,8 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
 
     extracted = torch.load(extracted_path)
 
-    masks = extracted["masks"]
+    # masks = extracted["masks"]
+    labels = extracted["labels"]
 
     gaps = extracted["gaps"]
     class_names = extracted["class_names"]
@@ -173,7 +174,7 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
     # return
     df = get_gap_result_df(
         gaps,
-        masks,
+        labels,
         class_names,
         class_sizes,
         num_classes,
@@ -183,14 +184,14 @@ def analyze_gap(extracted_path: str, data_name: str, config_name: str):
     return df
 
 
-def get_gap_result_df(gaps, masks, class_names, class_sizes, num_classes, save_dir):
+def get_gap_result_df(gaps, labels, class_names, class_sizes, num_classes, save_dir):
     if gaps.ndim == 4:
         gaps = gaps[:, :, 0, 0]
 
     class_labels, class_label_names = _convert_class_names_to_labels(class_names)
     class_labels = class_labels.numpy()
 
-    is_anomaly_gt = (masks.sum(dim=(1, 2, 3)) > 0).to(torch.long)
+    is_anomaly_gt = labels.to(torch.long)
 
     return _evaluate_tail_class_detection(
         gaps=gaps,
@@ -210,26 +211,35 @@ def _evaluate_tail_class_detection(
 ):
 
     method_names = [
-        "acs-max_step-none",
-        "acs-max_step-mode",
-        "acs-double_max_step-none",
-        "acs-double_max_step-mode",
-        "acs-double_min_bin_count-none",
-        "acs-double_min_bin_count-mode",
-        "acs-min_kde-none",
-        "acs-double_min_kde-none",
-        "scs_symmin",
-        "scs_indep",
-        "lof",
-        "if",
-        "ocsvm",
-        "dbscan",
-        "dbscan_adaptive",
-        "dbscan_adaptive_elbow",
-        "kmeans",
-        "gmm",
-        "kde",
-        "affprop",
+        # "datamax",
+        # "data_double_max",
+        # "data_hard_max",
+        # "acs-trim_min-none",
+        "acs-trim_min-mode",
+        # "acs-trim_min-mean",
+        # "acs-truncate_min-none",
+        # "acs-truncate_min-mode",
+        # "acs-truncate_min-mean",
+        # "acs-half_min-none",
+        # "acs-half_min-mode",
+        # "acs-half_min-mean",
+        # "acs-ruled_max_step-none",
+        # "acs-ruled_max_step-mode",
+        # "acs-ruled_max_step-mean",
+        # "acs-max_step-none",
+        # "acs-double_max_step-none",
+        # "scs_symmin",
+        # "scs_indep",
+        # "lof",
+        # "if",
+        # "ocsvm",
+        # "dbscan",
+        # "dbscan_adaptive",
+        # "dbscan_adaptive_elbow",
+        # "kmeans",
+        # "gmm",
+        # "kde",
+        # "affprop",
     ]
 
     results = []
@@ -260,7 +270,35 @@ def _get_result_tail_class_detection(
     gaps: torch.Tensor,
 ):
 
-    if "acs" in method_name:
+    if method_name == "datamax":
+        self_sim = class_size.compute_self_sim(gaps)
+        
+        tail_scores = torch.diag(F.softmax(gaps.norm(dim=1).mean() * self_sim, dim=-1))
+        
+        th = adaptive_class_size._compute_th_max_step(tail_scores.numpy())
+        is_tail_pred = (tail_scores >= th).long()
+        # utils.plot_scores(np.sort(tail_scores.numpy()), alpha=1, markersize=2.5)
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    elif method_name == "data_double_max":
+        self_sim = class_size.compute_self_sim(gaps)
+        
+        tail_scores = torch.diag(F.softmax(gaps.norm(dim=1).mean() * self_sim, dim=-1))
+        
+        th = -adaptive_class_size._compute_th_double_max_step(-tail_scores.numpy())
+        is_tail_pred = (tail_scores >= th).long()
+        # utils.plot_scores(np.sort(tail_scores.numpy()), alpha=1, markersize=2.5)
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    
+    elif method_name == "data_hard_max":
+        self_sim = class_size.compute_self_sim(gaps)
+        
+        tail_scores = torch.diag(F.softmax(gaps.norm(dim=1).mean() * self_sim, dim=-1))
+        
+        is_tail_pred = (tail_scores >= 0.5).long()
+        # utils.plot_scores(np.sort(tail_scores.numpy()), alpha=1, markersize=2.5)
+        class_sizes_pred = torch.zeros_like(tail_scores)
+
+    elif "acs" in method_name:
         self_sim = class_size.compute_self_sim(gaps)
         method_parts = method_name.split("-")
         th_type = method_parts[1]
@@ -719,22 +757,25 @@ def analyze(data="mvtec_all", type="gap", seeds: list=list(range(101,106))):
         for data_name in data_names:
             print(f"config: {config_name} data: {data_name}")
             extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
-
-            if type == "gap":
-                _df = analyze_gap(
-                    extracted_path=extracted_path,
-                    data_name=data_name,
-                    config_name=config_name,
-                )
-            elif type == "patch":
-                _df = analyze_patch(
-                    extracted_path=extracted_path,
-                    data_name=data_name,
-                    config_name=config_name,
-                )
-            else:
-                raise NotImplementedError()
-            dfs.append(_df)
+            
+            try:
+                if type == "gap":
+                    _df = analyze_gap(
+                        extracted_path=extracted_path,
+                        data_name=data_name,
+                        config_name=config_name,
+                    )
+                elif type == "patch":
+                    _df = analyze_patch(
+                        extracted_path=extracted_path,
+                        data_name=data_name,
+                        config_name=config_name,
+                    )
+                else:
+                    raise NotImplementedError()
+                dfs.append(_df)
+            except:
+                pass
 
     avg_df = average_dfs(dfs)
     os.makedirs("./logs", exist_ok=True)
@@ -763,8 +804,6 @@ def get_data_names(data: str, seeds: list):
         data_base_names = [mvtec_data_base_names[1]]
     elif data == "mvtec_step_pareto":
         data_base_names = [mvtec_data_base_names[2]]
-    elif data == "":
-        data_base_names = [mvtec_data_base_names[2]]
     elif data == "visa_all":
         data_base_names = visa_data_base_names
     elif data == "visa_step_tk1":
@@ -772,8 +811,6 @@ def get_data_names(data: str, seeds: list):
     elif data == "visa_step_tk4":
         data_base_names = [visa_data_base_names[1]]
     elif data == "visa_step_pareto":
-        data_base_names = [visa_data_base_names[2]]
-    elif data == "":
         data_base_names = [visa_data_base_names[2]]
     else:
         raise NotImplementedError()
@@ -790,10 +827,10 @@ def get_data_names(data: str, seeds: list):
 # mvtec:
 if __name__ == "__main__":
     utils.set_seed(0)
-    seeds_visa = [200, 201, 202, 203, 204]
+    # seeds_visa = list(range(201,210))
     seeds_mvtec = [101, 102, 103, 104, 105]
     analyze(data="mvtec_all", type="gap", seeds=seeds_mvtec)
-    analyze(data="visa_all", type="gap", seeds=seeds_visa)
+    # analyze(data="visa_all", type="gap", seeds=seeds_visa)
     # analyze(data="mvtec_step_tk4", type="gap", seeds=seeds_mvtec)
     # analyze(data="mvtec_step_tk1", type="gap", seeds=seeds_mvtec)   
     # analyze(data="mvtec_step_pareto", type="gap", seeds=seeds_mvtec)
