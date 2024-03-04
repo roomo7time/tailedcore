@@ -115,16 +115,16 @@ NUM_TRAIN_SAMPLES_MVTEC = {
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
     parser.add_argument(
-        "--data_name", type=str, choices=["mvtec", "visa"], default="visa", help=""
+        "--data_name", type=str, choices=["mvtec", "visa"], default="mvtec", help=""
     )
     parser.add_argument(
-        "--tail_type", type=str, choices=["step", "pareto"], default="step", help=""
+        "--tail_type", type=str, choices=["step", "pareto"], default="pareto", help=""
     )
     parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
-    parser.add_argument("--noise_ratio", type=float, default=0.05, help="") # mvtec 0.1, visa 0.05
-    parser.add_argument("--seed", type=int, default=200, help="")
+    parser.add_argument("--noise_ratio", type=float, default=0.1, help="") # mvtec 0.1, visa 0.05
+    parser.add_argument("--seed", type=int, default=106, help="")
     parser.add_argument(
         "--tail_level",
         type=str,
