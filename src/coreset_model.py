@@ -755,7 +755,7 @@ class AATailedPatch(BaseCore):
             brute=brute,
         )
 
-        assert tail_th_type in ['symmin', 'double_max_step', 'adasymmin-mode']
+        assert tail_th_type in ['symmin', 'double_max_step', 'ada_trim_min-mode']
         if tail_th_type == 'symmin':
             self.tail_sampler = TailSampler(th_type=tail_th_type)
         elif tail_th_type == 'double_max_step':
