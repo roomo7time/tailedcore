@@ -17,6 +17,8 @@ Then, run `bash run_make_visa.sh`
 
 [MVTec-LT-Noisy (pareto tail)](https://www.dropbox.com/scl/fi/0couau4d8ffag96dnia61/mvtec_pareto_random_nr10.zip?rlkey=aknswq9tioo1i5smgjlpe9pms&dl=0)
 
+[mvtec_pareto_random_nr10_seed106](https://www.dropbox.com/scl/fi/qhnrsiqxj3z036ebp2txz/mvtec_pareto_random_nr10_seed106.zip?rlkey=svfh0eb2u2qi9yax1mrxnjjgy&dl=0)
+
 
 
 
