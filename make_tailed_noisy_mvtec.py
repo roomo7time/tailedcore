@@ -111,11 +111,26 @@ NUM_TRAIN_SAMPLES_MVTEC = {
     "zipper": 240,
 }
 
+NUM_TRAIN_SAMPLES_VISA = {
+    "candle": 900,
+    "capsules": 542,
+    "cashew": 450,
+    "chewinggum": 453,
+    "fryum": 450,
+    "macaroni1": 900,
+    "macaroni2": 900,
+    "pcb1": 904,
+    "pcb2": 901,
+    "pcb3": 905,
+    "pcb4": 904,
+    "pipe_fryum": 450,
+}
+
 
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
     parser.add_argument(
-        "--data_name", type=str, choices=["mvtec", "visa"], default="mvtec", help=""
+        "--data_name", type=str, choices=["mvtec", "visa"], default="visa", help=""
     )
     parser.add_argument(
         "--tail_type", type=str, choices=["step", "pareto"], default="pareto", help=""
@@ -123,13 +138,13 @@ def get_args():
     parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
     parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
     parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
-    parser.add_argument("--noise_ratio", type=float, default=0.1, help="") # mvtec 0.1, visa 0.05
-    parser.add_argument("--seed", type=int, default=106, help="")
+    parser.add_argument("--noise_ratio", type=float, default=0.05, help="") # mvtec 0.1, visa 0.05
+    parser.add_argument("--seed", type=int, default=101, help="")
     parser.add_argument(
         "--tail_level",
         type=str,
         default="random",
-        choices=["random", "easy", "hard"],     # easy and hard is not feasible for 
+        choices=["random", "easy", "hard"],     # easy and hard is not feasible for visa
         help="",
     )
     parser.add_argument("--copy", action='store_true', 
@@ -162,6 +177,7 @@ def _save_data_config(
 def make_data_step(
     source_dir: str,
     target_dir: str,
+    data_name: str,
     noise_ratio: float = 0.1,
     noise_on_tail: bool = False,
     tail_k: int = 4,
@@ -178,7 +194,7 @@ def make_data_step(
     if os.path.exists(data_config_path):
         tailed_files, noisy_files = _load_data_config(data_config_path)
     elif os.path.exists(target_dir):
-        data_config = make_config_pkl_from_data(target_dir)
+        data_config = make_config_pkl_from_data(target_dir, data_name=data_name)
         tailed_files, noisy_files = (
             data_config["tailed_files"],
             data_config["noisy_files"],
@@ -241,6 +257,7 @@ def make_data_step(
 def make_data_pareto(
     source_dir: str,
     target_dir: str,
+    data_name: str,
     noise_ratio: float = 0.1,
     noise_on_tail: bool = False,  # TODO: need to be implemented
     seed: int = 0,
@@ -256,7 +273,7 @@ def make_data_pareto(
     if os.path.exists(data_config_path):
         tailed_files, noisy_files = _load_data_config(data_config_path)
     elif os.path.exists(target_dir):
-        data_config = make_config_pkl_from_data(target_dir)
+        data_config = make_config_pkl_from_data(target_dir, data_name=data_name)
         tailed_files, noisy_files = (
             data_config["tailed_files"],
             data_config["noisy_files"],
@@ -891,6 +908,8 @@ def make_config_pkl_from_data(data_dir, data_name="mvtec", save_pkl=False):
 
     if data_name == "mvtec":
         num_train_samples = NUM_TRAIN_SAMPLES_MVTEC
+    elif data_name == "visa":
+        num_train_samples = NUM_TRAIN_SAMPLES_VISA
     else:
         raise NotImplementedError()
 
@@ -984,6 +1003,7 @@ def make_data(args):
         make_data_step(
             source_dir,
             target_dir,
+            data_name=args.data_name,
             noise_ratio=args.noise_ratio,
             noise_on_tail=args.noise_on_tail,
             tail_k=args.step_tail_k,
@@ -1010,6 +1030,7 @@ def make_data(args):
         make_data_pareto(
             source_dir,
             target_dir,
+            data_name=args.data_name,
             noise_ratio=args.noise_ratio,
             noise_on_tail=args.noise_on_tail,
             seed=args.seed,
