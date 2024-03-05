@@ -3,19 +3,16 @@
 
 seeds=(
     200
-    201
+    203
     206
     212
-    213
-    214
+    217
+    218
     220
     221
-    223
-    224
     232
-    236
     237
-    238
+    240
     241
     245
     247
@@ -45,12 +42,12 @@ for seed in "${seeds[@]}"; do
     #     --data_sub_path "visa_pareto_random_nr05_seed${seed}" \
     #     --config_name "aatailedpatch_mvtec_11"
 
-    python evaluate.py \
-        --data_sub_path "visa_step_random_nr05_tk1_tr60_seed${seed}" \
-        --config_name "aatailedpatch_mvtec_11"
-
     # python evaluate.py \
-    #     --data_sub_path "visa_step_random_nr05_tk4_tr60_seed${seed}" \
-    #     --config_name "aatailedpatch_mvtec_07"
+    #     --data_sub_path "visa_step_random_nr05_tk1_tr60_seed${seed}" \
+    #     --config_name "aatailedpatch_mvtec_11"
+
+    python evaluate.py \
+        --data_sub_path "visa_step_random_nr05_tk4_tr60_seed${seed}" \
+        --config_name "aatailedpatch_mvtec_11"
     
 done
