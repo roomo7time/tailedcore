@@ -3,7 +3,7 @@
 
 mkdir -p ./logs
 
-for seed in {200..249}; do
+for seed in {101..105}; do
     # Define config names
     CONFIG_NAMES=(
         "extract_mvtec_01"
