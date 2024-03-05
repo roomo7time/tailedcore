@@ -11,16 +11,19 @@ Then, run `bash run_make_visa.sh`
 
 ## Long-tail noisy data download
 
-[MVTec-LT-Noisy (step tail k=4)](https://www.dropbox.com/scl/fi/5ssqx9fq4h3lb56npetdm/mvtec_step_random_nr10_tk4_tr60.zip?rlkey=f2s0xpa5z8jp9bqcnrv3um5yj&dl=0)
+[MVTecAD-LT-Noisy-K4](https://www.dropbox.com/scl/fi/5ssqx9fq4h3lb56npetdm/mvtec_step_random_nr10_tk4_tr60.zip?rlkey=f2s0xpa5z8jp9bqcnrv3um5yj&dl=0)
 
-[MVTec-LT-Noisy (step tail k=1)](https://www.dropbox.com/scl/fi/y4357oz2nmxzkduc9ogok/mvtec_step_random_nr10_tk1_tr60.zip?rlkey=cxgsc2v6d4m3ca6xgxdxlicvy&dl=0)
+[MVTecAD-LT-Noisy-K1](https://www.dropbox.com/scl/fi/y4357oz2nmxzkduc9ogok/mvtec_step_random_nr10_tk1_tr60.zip?rlkey=cxgsc2v6d4m3ca6xgxdxlicvy&dl=0)
 
-[MVTec-LT-Noisy (pareto tail)](https://www.dropbox.com/scl/fi/0couau4d8ffag96dnia61/mvtec_pareto_random_nr10.zip?rlkey=aknswq9tioo1i5smgjlpe9pms&dl=0)
+[MVTecAD-LT-Noisy-Pareto](https://www.dropbox.com/scl/fi/0couau4d8ffag96dnia61/mvtec_pareto_random_nr10.zip?rlkey=aknswq9tioo1i5smgjlpe9pms&dl=0)
 
 [mvtec_pareto_random_nr10_seed106](https://www.dropbox.com/scl/fi/qhnrsiqxj3z036ebp2txz/mvtec_pareto_random_nr10_seed106.zip?rlkey=svfh0eb2u2qi9yax1mrxnjjgy&dl=0)
 
+[VisA-LT-Noisy-K4]()
 
+[VisA-LT-Noisy-K1](https://www.dropbox.com/scl/fi/ckugcirwxl2dobvdep25i/visa_step_random_nr05_tk1_tr60.zip?rlkey=krgd0sikgzt5f0zmwcg78kpsm&dl=0)
 
+[VisA-LT-Noisy-Pareto](https://www.dropbox.com/scl/fi/ix2xma6fcdrlv8dzprulq/visa_pareto_random_nr05.zip?rlkey=gqgneojv99d5o44l22l0tpbjp&dl=0)
 
 
 
