@@ -14,6 +14,7 @@ from collections import Counter
 from tqdm import tqdm
 from joblib import Parallel, delayed
 
+
 import src.evaluator.result as result
 import src.class_size as class_size
 import src.adaptive_class_size as adaptive_class_size
@@ -220,19 +221,26 @@ def _evaluate_tail_class_detection(
         "acs-half_min-none",
         "acs-half_min-mode",
         "acs-half_min-mean",
-        # "acs-max_step-none",
-        # "acs-double_max_step-none",
-        # "scs_symmin",
-        # "scs_indep",
         "lof",
+        "lof_norm",
         "if",
+        "if_norm",
         "ocsvm",
+        "ocsvm_norm",
         "dbscan",
+        "dbscan_norm",
         "dbscan_elbow",
-        # "kmeans",
-        # "gmm",
-        # "kde",
-        # "affprop",
+        "dbscan_elbow_norm",
+        "kmeans",
+        "kmeans_norm",
+        "gmm",
+        "gmm_norm",
+        "kde",
+        "kde_norm",
+        "affprop",
+        "affprop_norm",
+        "knnod",
+        "knnod_norm",
     ]
 
     results = []
@@ -488,6 +496,23 @@ def _get_result_tail_class_detection(
         ).float()
         tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
         is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "knnod":
+        from pyod.models.knn import KNN
+        X = gaps.numpy()
+        knn = KNN()
+        knn.fit(X)
+        is_tail_pred = torch.from_numpy(knn.labels_)  # binary labels (0: inliers, 1: outliers)
+        tail_scores = torch.from_numpy(knn.decision_scores_)  # raw outlier scores
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    elif method_name == "knnod_norm":
+        from pyod.models.knn import KNN
+        gaps = F.normalize(gaps, dim=-1)
+        X = gaps.numpy()
+        knn = KNN()
+        knn.fit(X)
+        is_tail_pred = torch.from_numpy(knn.labels_)  # binary labels (0: inliers, 1: outliers)
+        tail_scores = torch.from_numpy(knn.decision_scores_)  # raw outlier scores
+        class_sizes_pred = torch.zeros_like(tail_scores)
     else:
         raise NotImplementedError()
 
@@ -863,6 +888,8 @@ def get_data_names(data: str, seeds: list):
         data_base_names = [visa_data_base_names[1]]
     elif data == "visa_pareto":
         data_base_names = [visa_data_base_names[2]]
+    elif data == "all":
+        data_base_names = mvtec_data_base_names + visa_data_base_names
     else:
         raise NotImplementedError()
 
@@ -880,17 +907,16 @@ if __name__ == "__main__":
     utils.set_seed(0)
 
     seeds = [101, 102, 103, 104, 105]
-    seeds = [101]
     
     analyze(data="mvtec_pareto", type="gap", seeds=seeds)
-    # analyze(data="mvtec_step_tk4", type="gap", seeds=seeds)
+    analyze(data="mvtec_step_tk4", type="gap", seeds=seeds)
+    analyze(data="mvtec_step_tk1", type="gap", seeds=seeds)
+    analyze(data="mvtec_all", type="gap", seeds=seeds)
+    
+    analyze(data="visa_pareto", type="gap", seeds=seeds)
+    analyze(data="visa_step_tk4", type="gap", seeds=seeds)
+    analyze(data="visa_step_tk1", type="gap", seeds=seeds)
+    analyze(data="visa_all", type="gap", seeds=seeds)
 
-    # analyze(data="mvtec_all", type="gap", seeds=seeds)
-    # analyze(data="visa_all", type="gap", seeds=seeds_visa)
-    # analyze(data="mvtec_step_tk4", type="gap", seeds=seeds_mvtec)
-    # analyze(data="mvtec_step_tk1", type="gap", seeds=seeds_mvtec)   
-    # analyze(data="mvtec_step_pareto", type="gap", seeds=seeds_mvtec)
-    # analyze(data="mvtec_step_tk4", type="patch")
-    # analyze(data="mvtec_step_tk1", type="patch")
-    # analyze(data="mvtec_step_pareto", type="patch")
+    analyze(data="all", type="gap", seeds=seeds)
     
