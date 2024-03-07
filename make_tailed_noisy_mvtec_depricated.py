@@ -27,7 +27,7 @@ from src.utils import set_seed, modify_subfolders_in_path, save_dict, load_dict,
 #     "zipper",
 # ]
 
-_DATA_CONFIG_ROOT = './data_configs/visa'
+_DATA_CONFIG_ROOT = './data_configs/mvtec'
 
 
 def _load_data_config(data_config_path):
@@ -76,6 +76,10 @@ def make_data_step(
         data_config_name += f"_tailnoised"
     
     data_config_path = f"{data_config_name}.pkl"
+    # data_config_path = data_config_path.replace("step_", "mvtec_step_")
+    # data_config_path = data_config_path.replace("nr10_k", "nr10_tk")
+    # data_config_path = data_config_path.replace("_seed", "_tr60_seed")
+    
 
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
@@ -121,16 +125,20 @@ def make_data_pareto(
     
     set_seed(seed)
 
-    data_config_name = os.path.join(_DATA_CONFIG_ROOT, os.path.basename(source_dir), f'pareto_nr{int(noise_ratio*100):02d}_seed{seed}')
+    data_config_name = os.path.join(_DATA_CONFIG_ROOT, f'pareto_nr{int(noise_ratio*100):02d}_seed{seed}')
 
     if noise_on_tail:
         data_config_name += f"_tailnoised"
     
     data_config_path = f"{data_config_name}.pkl"
+
+    # data_config_path = data_config_path.replace("pareto_", "mvtec_pareto_random_")
     
     if os.path.exists(data_config_path):
         files, train_files, anomaly_files, num_tail_samples, num_noise_samples, head_classes = _load_data_config(data_config_path)
     else:
+
+        raise FileNotFoundError()
 
         _MVTEC_CLASS_LIST = get_subdirectories(source_dir)
 
@@ -483,11 +491,13 @@ def create_symlinks(file_mapper):
         target_dir = os.path.dirname(target)
         os.makedirs(target_dir, exist_ok=True)
 
-        # Create a symlink from the source to the target
-        try:
-            os.symlink(source, target)
-        except:
-            pass
+        os.symlink(source, target)
+
+        # # Create a symlink from the source to the target
+        # try:
+        #     os.symlink(source, target)
+        # except:
+        #     pass
         # print(f"Symlink created: {source} -> {target}")
 
 
@@ -551,10 +561,10 @@ def get_subdirectories(directory_path):
 
 def main():
     # arguments
-    tail_type = "step"
-    # tail_type = "pareto"
+    # tail_type = "step"
+    tail_type = "pareto"
 
-    seed = 0
+    seed = 2
 
     tail_k = 4  # 4 or 1
     noise_on_tail = False
