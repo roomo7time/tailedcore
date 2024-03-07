@@ -10,15 +10,21 @@ def plot_bars(
     list_names,
     x_ticks,
     y_label,
-    filename,
     list_colors=None,
     alpha=0.75,
     width=0.4,
     x_tick_size=16,
     y_label_size=16,
-    show=False,
     legend=True,
+    filename=None,
+    ax=None
 ):
+    
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    plt.sca(ax)
+
     if list_colors is None:
         # Create a colormap and generate colors from it
         cmap = plt.cm.get_cmap("hsv", len(data_lists))
@@ -52,40 +58,38 @@ def plot_bars(
     if legend:
         plt.legend()
 
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    plt.savefig(filename, bbox_inches="tight")
-
-    if show:
-        plt.show()
-
-    plt.close()
+    if filename is not None:
+        plt.tight_layout()
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        plt.savefig(filename, bbox_inches="tight", format=os.path.splitext(filename)[1][1:], dpi=300)
+        plt.close()
 
 
-def plot_roc_curves(score_arrays, true_labels, score_names=None, filename='./auroc.png'):
+# def plot_roc_curves(score_arrays, true_labels, score_names=None, filename='./auroc.png'):
 
-    for i, scores in enumerate(score_arrays):
-        # Compute ROC curve and ROC area for each class
-        fpr, tpr, _ = roc_curve(true_labels, scores)
-        roc_auc = auc(fpr, tpr)
+#     for i, scores in enumerate(score_arrays):
+#         # Compute ROC curve and ROC area for each class
+#         fpr, tpr, _ = roc_curve(true_labels, scores)
+#         roc_auc = auc(fpr, tpr)
 
-        # Use score names if provided, else default to model index
-        label = f" (AUROC = {roc_auc:.2f})"
-        if score_names and i < len(score_names):
-            label = score_names[i] + label
+#         # Use score names if provided, else default to model index
+#         label = f" (AUROC = {roc_auc:.2f})"
+#         if score_names and i < len(score_names):
+#             label = score_names[i] + label
 
-        plt.plot(fpr, tpr, lw=2, label=label)
+#         plt.plot(fpr, tpr, lw=2, label=label)
 
-    plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
-    plt.xlim([-0.01, 1.0])
-    plt.ylim([0.0, 1.01])
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.legend(loc="lower right")
+#     plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
+#     plt.xlim([-0.01, 1.0])
+#     plt.ylim([0.0, 1.01])
+#     plt.xlabel("False Positive Rate")
+#     plt.ylabel("True Positive Rate")
+#     plt.legend(loc="lower right")
     
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(filename)
-    plt.close()
+#     os.makedirs(os.path.dirname(filename), exist_ok=True)
+#     plt.tight_layout()
+#     plt.savefig(filename)
+#     plt.close()
 
 
 def plot_and_save_correlation_graph(
@@ -98,10 +102,19 @@ def plot_and_save_correlation_graph(
     score2_name="Score 2",
     alpha=0.01,
     ylim=None,
+    label_size=16,
     polyfit=False,
     polyfit_color="#0D4A70",
-    filename="./correlation_graph.png",
+    filename=None,
+    ax=None,
 ):
+    
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    plt.sca(ax)
+
+
     if len(scores1) != len(scores2) or len(scores1) != len(labels):
         raise ValueError("Scores and labels arrays must have the same length.")
 
@@ -136,8 +149,8 @@ def plot_and_save_correlation_graph(
             label=label_names[i],
         )
 
-    plt.xlabel(score1_name)
-    plt.ylabel(score2_name)
+    plt.xlabel(score1_name, size=label_size)
+    plt.ylabel(score2_name, size=label_size)
 
     if polyfit:
         # Randomly sample approximately 1% of the data points for the polyfit calculation
@@ -156,12 +169,11 @@ def plot_and_save_correlation_graph(
     if ylim is not None:
         plt.ylim(ylim)
 
-    plt.tight_layout()  # Adjust the layout
-
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-
-    plt.savefig(filename)
-    plt.close()
+    if filename is not None:
+        plt.tight_layout()
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        plt.savefig(filename, bbox_inches="tight", format=os.path.splitext(filename)[1][1:], dpi=300)
+        plt.close()
 
 
 if __name__ == "__main__":
