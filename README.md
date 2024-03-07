@@ -19,7 +19,7 @@ Then, run `bash run_make_visa.sh`
 
 [mvtec_pareto_random_nr10_seed106](https://www.dropbox.com/scl/fi/qhnrsiqxj3z036ebp2txz/mvtec_pareto_random_nr10_seed106.zip?rlkey=svfh0eb2u2qi9yax1mrxnjjgy&dl=0)
 
-[VisA-LT-Noisy-K4]()
+[VisA-LT-Noisy-K4](https://www.dropbox.com/scl/fi/tcrh98kwhfix2elrw05xf/visa_step_random_nr05_tk4_tr60.zip?rlkey=fe3myg51lvne7riechbzonjwa&dl=0)
 
 [VisA-LT-Noisy-K1](https://www.dropbox.com/scl/fi/ckugcirwxl2dobvdep25i/visa_step_random_nr05_tk1_tr60.zip?rlkey=krgd0sikgzt5f0zmwcg78kpsm&dl=0)
 
