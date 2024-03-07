@@ -12,7 +12,7 @@ model:
   embedding_to_extract_from: "avgpool"
 
   coreset_model_name: "aatailedpatch"
-  tail_th_type: null
+  tail_th_type: "ada_trim_min-mode"
   tail_data_augment_type: null
   tail_lof: false
 
