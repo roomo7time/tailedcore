@@ -762,6 +762,10 @@ class AATailedPatch(BaseCore):
             self.tail_sampler = AdaptiveTailSampler(th_type=tail_th_type)
         elif tail_th_type == 'ada_trim_min-mode':
             self.tail_sampler = AdaptiveTailSampler(th_type='trim_min', vote_type='mode')
+        elif tail_th_type is None:
+            pass
+        else:
+            raise NotImplementedError()
 
         if tail_lof:
             self.noise_discriminator = TailedLOFSampler(
@@ -888,12 +892,15 @@ class AATailedPatch(BaseCore):
         
         features, embeddings = self._get_features(trainloader, return_embeddings=True)
 
-        coreset_tail_features = self._get_coreset_tail(features, embeddings, trainloader)
         coreset_head_features = self._get_coreset_head(features)
 
-        coreset_features = torch.cat(
-            [coreset_tail_features, coreset_head_features], dim=0
-        )
+        if hasattr(self, 'tail_sampler'):
+            coreset_tail_features = self._get_coreset_tail(features, embeddings, trainloader)
+            coreset_features = torch.cat(
+                [coreset_tail_features, coreset_head_features], dim=0
+            )
+        else:
+            coreset_features = coreset_head_features
 
         return coreset_features
 
