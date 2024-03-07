@@ -173,3 +173,5 @@ data_configs_backup
 # !configs/atailedpatch_mvtec_01.yaml
 
 shared_resources/*
+
+backup
