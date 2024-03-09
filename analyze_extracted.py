@@ -913,10 +913,10 @@ if __name__ == "__main__":
     analyze(data="mvtec_step_tk1", type="gap", seeds=seeds)
     analyze(data="mvtec_all", type="gap", seeds=seeds)
     
-    analyze(data="visa_pareto", type="gap", seeds=seeds)
-    analyze(data="visa_step_tk4", type="gap", seeds=seeds)
-    analyze(data="visa_step_tk1", type="gap", seeds=seeds)
-    analyze(data="visa_all", type="gap", seeds=seeds)
+    # analyze(data="visa_pareto", type="gap", seeds=seeds)
+    # analyze(data="visa_step_tk4", type="gap", seeds=seeds)
+    # analyze(data="visa_step_tk1", type="gap", seeds=seeds)
+    # analyze(data="visa_all", type="gap", seeds=seeds)
 
     analyze(data="all", type="gap", seeds=seeds)
     

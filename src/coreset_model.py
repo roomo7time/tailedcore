@@ -85,38 +85,8 @@ def get_coreset_model(
             noise_discriminator_type=getattr(model_config, 'noise_discriminator_type', 'few_shot_lof'),
             auto_thresholding_on_lof=getattr(model_config, 'auto_thresholding_on_lof', False)
         )
-    elif model_config.coreset_model_name == "atailedpatch":
-        return ATailedPatch(
-            feature_embedder,
-            device,
-            imagesize,
-            coreset_ratio=coreset_ratio,
-            faiss_on_gpu=faiss_on_gpu,
-            faiss_num_workers=faiss_num_workers,
-            sampler_on_gpu=sampler_on_gpu,
-            save_dir_path=save_dir_path,
-            brute=brute,
-            tail_th_type=model_config.tail_th_type,
-            data_augment_tail=model_config.data_augment_tail,
-            tail_lof=model_config.tail_lof,
-        )
     elif model_config.coreset_model_name == "aatailedpatch":
         return AATailedPatch(
-            feature_embedder,
-            device,
-            imagesize,
-            coreset_ratio=coreset_ratio,
-            faiss_on_gpu=faiss_on_gpu,
-            faiss_num_workers=faiss_num_workers,
-            sampler_on_gpu=sampler_on_gpu,
-            save_dir_path=save_dir_path,
-            brute=brute,
-            tail_th_type=model_config.tail_th_type,
-            tail_data_augment_type=model_config.tail_data_augment_type,
-            tail_lof=model_config.tail_lof,
-        )
-    elif model_config.coreset_model_name == 'tailedsoftpatch':
-        return TailedSoftPatch(
             feature_embedder,
             device,
             imagesize,
