@@ -167,6 +167,7 @@ def update_data(
     source_dir,
     noise_ratio
 ):
+    assert old_data_name.split("_")[0] == source_dir.split("/")[-1]
     data_config_path = (
         f"{os.path.join(_DATA_CONFIG_ROOT, old_data_name)}.pkl"
     )
@@ -206,6 +207,7 @@ def update_data(
         tailed_files=tailed_files,
         noisy_files=noisy_files,
     )
+    print(f"Update complete - old_data_name:{old_data_name} noise_ratio:{noise_ratio}")
 
 def make_data_step(
     source_dir: str,
