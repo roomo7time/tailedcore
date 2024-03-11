@@ -26,7 +26,7 @@ def parse_args():
         # default="visa_pareto_random_nr05_seed207",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
-    parser.add_argument("--config_name", type=str, default="aatailedpatch_mvtec_13")
+    parser.add_argument("--config_name", type=str, default="aatailedpatch_mvtec_09")
     # parser.add_argument("--config_name", type=str, default="extract_mvtec_01")
 
     # # toy setting

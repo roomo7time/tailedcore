@@ -9,10 +9,12 @@ import PIL
 import torch
 import argparse
 import matplotlib.pyplot as plt
+from scipy.ndimage import zoom
 import numpy as np
 import pickle as pkl
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
+from typing import List
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +99,60 @@ def plot_score_masks(
         combined_image = np.vstack((top_row, bottom_row))
 
         cv2.imwrite(savename, cv2.cvtColor(combined_image, cv2.COLOR_RGB2BGR))
+
+def plot_mvtec_score_masks(
+    save_dir_path: str,
+    image_paths: List[str],
+    masks_gt: np.ndarray,
+    score_masks: np.ndarray,
+):
+    os.makedirs(save_dir_path, exist_ok=True)
+    print(f"Plotting score masks at {save_dir_path}")
+
+    def resize_and_crop(image, output_size=(224, 224)):
+        scale = 256.0 / min(image.shape[:2])
+        new_size = (int(np.round(image.shape[0] * scale)),
+                    int(np.round(image.shape[1] * scale)))
+        resized_image = zoom(image, (scale, scale, 1), order=1)
+        margin_y = (resized_image.shape[0] - output_size[0]) // 2
+        margin_x = (resized_image.shape[1] - output_size[1]) // 2
+        cropped_image = resized_image[margin_y:margin_y + output_size[0], margin_x:margin_x + output_size[1]]
+        return cropped_image
+
+    for i, (image_path, mask_gt, score_mask) in enumerate(zip(image_paths, masks_gt, score_masks)):
+        base_filename = "_".join(image_path.split("/")[-2:])
+        base_filename_without_ext = os.path.splitext(base_filename)[0]
+        image = plt.imread(image_path).astype(np.float32)
+        if image.max() > 1:  # Ensure the image is normalized
+            image /= 255.0
+
+        processed_image = resize_and_crop(image)
+
+        # Convert masks to 8-bit as required by applyColorMap
+        score_mask_8bit = (score_mask * 255).astype(np.uint8)
+        mask_gt_8bit = (mask_gt * 255).astype(np.uint8)
+
+        # Apply the colormap
+        colored_score_mask = cv2.applyColorMap(score_mask_8bit, cv2.COLORMAP_JET)
+        colored_mask_gt = cv2.applyColorMap(mask_gt_8bit, cv2.COLORMAP_JET)
+
+        # Convert BGR to RGB (OpenCV uses BGR by default)
+        colored_score_mask = cv2.cvtColor(colored_score_mask, cv2.COLOR_BGR2RGB)
+        colored_mask_gt = cv2.cvtColor(colored_mask_gt, cv2.COLOR_BGR2RGB)
+
+        # Create overlay images
+        overlay_image = (processed_image * 0.3 + colored_score_mask / 255.0 * 0.7)
+        overlay_gt_image = (processed_image * 0.3 + colored_mask_gt / 255.0 * 0.7)
+
+        overlay_image = np.clip(overlay_image, 0, 1)
+        overlay_gt_image = np.clip(overlay_gt_image, 0, 1)
+
+        # Save the overlay images
+        overlay_score_mask_savename = os.path.join(save_dir_path, base_filename_without_ext + "_score_overlay.jpg")
+        plt.imsave(overlay_score_mask_savename, overlay_image)
+
+        overlay_gt_mask_savename = os.path.join(save_dir_path, base_filename_without_ext + "_gt_overlay.jpg")
+        plt.imsave(overlay_gt_mask_savename, overlay_gt_image)
 
 
 def create_storage_folder(

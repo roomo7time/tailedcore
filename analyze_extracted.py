@@ -819,43 +819,36 @@ def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
     return avg_df
 
 
-def analyze(data="mvtec_all", type="gap", seeds: list=list(range(101,106))):
+def analyze(data="mvtec_all", config_name="extract_mvtec_01", type="gap", seeds: list=list(range(101,106))):
 
     data_names = get_data_names(data, seeds=seeds,)
 
-    config_names = [
-        "extract_mvtec_01",
-        # "extract_mvtec_02",
-        # "extract_mvtec_03",
-        # "extract_mvtec_04",
-    ]
 
     dfs = []
 
-    for config_name in config_names:
-        for data_name in data_names:
-            print(f"config: {config_name} data: {data_name}")
-            extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
-            
-            if type == "gap":
-                _df = analyze_gap(
-                    extracted_path=extracted_path,
-                    data_name=data_name,
-                    config_name=config_name,
-                )
-            elif type == "patch":
-                _df = analyze_patch(
-                    extracted_path=extracted_path,
-                    data_name=data_name,
-                    config_name=config_name,
-                )
-            else:
-                raise NotImplementedError()
-            dfs.append(_df)
+    for data_name in data_names:
+        print(f"config: {config_name} data: {data_name}")
+        extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
+        
+        if type == "gap":
+            _df = analyze_gap(
+                extracted_path=extracted_path,
+                data_name=data_name,
+                config_name=config_name,
+            )
+        # elif type == "patch":
+        #     _df = analyze_patch(
+        #         extracted_path=extracted_path,
+        #         data_name=data_name,
+        #         config_name=config_name,
+        #     )
+        else:
+            raise NotImplementedError()
+        dfs.append(_df)
 
     avg_df = average_dfs(dfs)
     os.makedirs("./logs", exist_ok=True)
-    avg_df.to_csv(f"./logs/analysis-{data}-{type}.csv", index=False)
+    avg_df.to_csv(f"./logs/analysis-{data}-{type}-{config_name}.csv", index=False)
 
 
 def get_data_names(data: str, seeds: list):
@@ -907,16 +900,15 @@ if __name__ == "__main__":
     utils.set_seed(0)
 
     seeds = [101, 102, 103, 104, 105]
+    config_names = [
+        # "extract_mvtec_01",
+        "extract_mvtec_02",
+        "extract_mvtec_03",
+        "extract_mvtec_04",
+    ]
     
-    analyze(data="mvtec_pareto", type="gap", seeds=seeds)
-    analyze(data="mvtec_step_tk4", type="gap", seeds=seeds)
-    analyze(data="mvtec_step_tk1", type="gap", seeds=seeds)
-    analyze(data="mvtec_all", type="gap", seeds=seeds)
-    
-    # analyze(data="visa_pareto", type="gap", seeds=seeds)
-    # analyze(data="visa_step_tk4", type="gap", seeds=seeds)
-    # analyze(data="visa_step_tk1", type="gap", seeds=seeds)
-    # analyze(data="visa_all", type="gap", seeds=seeds)
-
-    analyze(data="all", type="gap", seeds=seeds)
+    for config_name in config_names:
+        analyze(data="mvtec_all", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="visa_all", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="all", type="gap", config_name=config_name, seeds=seeds)
     
