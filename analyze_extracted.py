@@ -901,14 +901,18 @@ if __name__ == "__main__":
 
     seeds = [101, 102, 103, 104, 105]
     config_names = [
-        # "extract_mvtec_01",
+        "extract_mvtec_01",
         "extract_mvtec_02",
         "extract_mvtec_03",
         "extract_mvtec_04",
     ]
     
     for config_name in config_names:
-        analyze(data="mvtec_all", type="gap", config_name=config_name, seeds=seeds)
-        analyze(data="visa_all", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="mvtec_step_tk1", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="mvtec_step_tk4", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="mvtec_pareto", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="visa_step_tk1", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="visa_step_tk4", type="gap", config_name=config_name, seeds=seeds)
+        analyze(data="visa_pareto", type="gap", config_name=config_name, seeds=seeds)
         analyze(data="all", type="gap", config_name=config_name, seeds=seeds)
     
