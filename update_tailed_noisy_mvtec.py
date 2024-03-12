@@ -130,25 +130,12 @@ NUM_TRAIN_SAMPLES_VISA = {
 def get_args():
     parser = argparse.ArgumentParser(description="Data processing script.")
     parser.add_argument(
+        "--old_data_name", type=str, default="mvtec_step_random_nr10_tk4_tr60_seed105", help=""
+    )
+    parser.add_argument("--noise_ratio", type=float, default=0.4, help="") 
+    parser.add_argument(
         "--data_name", type=str, choices=["mvtec", "visa"], default="mvtec", help=""
     )
-    parser.add_argument(
-        "--tail_type", type=str, choices=["step", "pareto"], default="step", help=""
-    )
-    parser.add_argument("--step_tail_k", type=int, default=4, choices=[1, 4], help="")
-    parser.add_argument("--step_tail_class_ratio", type=float, default=0.6, help="")
-    parser.add_argument("--noise_on_tail", type=bool, default=False, help="")
-    parser.add_argument("--noise_ratio", type=float, default=0.1, help="") # mvtec 0.1, visa 0.05
-    parser.add_argument("--seed", type=int, default=101, help="")
-    parser.add_argument(
-        "--tail_level",
-        type=str,
-        default="random",
-        choices=["random", "easy", "hard"],     # easy and hard is not feasible for visa
-        help="",
-    )
-    parser.add_argument("--copy", action='store_true', 
-                        help="Copy files. If false, then symlink")
 
     return parser.parse_args()
 
@@ -173,6 +160,54 @@ def _save_data_config(
 
     save_dict(data_config, data_config_path)
 
+
+
+def update_data(
+    old_data_name:str,
+    source_dir,
+    noise_ratio
+):
+    assert old_data_name.split("_")[0] == source_dir.split("/")[-1]
+    data_config_path = (
+        f"{os.path.join(_DATA_CONFIG_ROOT, old_data_name)}.pkl"
+    )
+
+    tailed_files, _ = _load_data_config(data_config_path)
+
+    _, src_train_files, src_anomaly_files = _get_mvtec_base_file_info(
+        source_dir
+    )
+
+    tail_train_files = defaultdict(list)
+    for file in tailed_files:
+        _class = file.split('/')[0]
+        _group = file.split('/')[1]
+        if _group == "train":
+            tail_train_files[_class].append(file)
+
+    num_noise_samples = {}
+    for _class_name in src_anomaly_files.keys():
+        num_noise_samples[_class_name] = int(len(src_train_files[_class_name]) * noise_ratio)
+    
+    _noisy_files = {}
+    for noisy_class, num_samples in num_noise_samples.items():
+        if len(tail_train_files[noisy_class]) >= 20:
+            _noisy_files[noisy_class] = random.sample(
+                src_anomaly_files[noisy_class], min(num_samples, len(src_anomaly_files[noisy_class]))
+            )
+    noisy_files = [item for sublist in _noisy_files.values() for item in sublist]
+    
+    old_data_name_parts = old_data_name.split("_")
+    old_data_name_parts[3] = f"nr{int(noise_ratio*100):02d}"
+    new_data_name = "_".join(old_data_name_parts)
+    target_dir = os.path.join(os.path.dirname(source_dir), new_data_name)
+    _make_data(
+        source_dir=source_dir,
+        target_dir=target_dir,
+        tailed_files=tailed_files,
+        noisy_files=noisy_files,
+    )
+    print(f"Update complete - old_data_name:{old_data_name} noise_ratio:{noise_ratio}")
 
 def make_data_step(
     source_dir: str,
@@ -979,73 +1014,77 @@ def make_config_pkl_from_data(data_dir, data_name="mvtec", save_pkl=False):
 
 def make_data(args):
     source_dir = f"./data/{args.data_name}"
-    target_dir = f"{source_dir}_{args.tail_type}_{args.tail_level}_nr{int(args.noise_ratio*100):02d}"
+    # target_dir = f"{source_dir}_{args.tail_type}_{args.tail_level}_nr{int(args.noise_ratio*100):02d}"
 
-    if args.tail_type == "step":
+    update_data(old_data_name=args.old_data_name, 
+                source_dir=source_dir,
+                noise_ratio=args.noise_ratio)
 
-        target_dir += (
-            f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
-        )
+    # if args.tail_type == "step":
 
-        if args.noise_on_tail:
-            target_dir += "_tailnoised"
-        target_dir += f"_seed{args.seed}"
+    #     target_dir += (
+    #         f"_tk{args.step_tail_k}_tr{int(args.step_tail_class_ratio*100):02d}"
+    #     )
 
-        if args.tail_level == "random":
-            tail_classes = None
-        elif args.tail_level == "easy":
-            tail_classes = STEP_TAIL_CLASSES_EASY[args.data_name]
-        elif args.tail_level == "hard":
-            tail_classes = STEP_TAIL_CLASSES_HARD[args.data_name]
-        else:
-            raise NotImplementedError()
+    #     if args.noise_on_tail:
+    #         target_dir += "_tailnoised"
+    #     target_dir += f"_seed{args.seed}"
 
-        make_data_step(
-            source_dir,
-            target_dir,
-            data_name=args.data_name,
-            noise_ratio=args.noise_ratio,
-            noise_on_tail=args.noise_on_tail,
-            tail_k=args.step_tail_k,
-            tail_class_ratio=args.step_tail_class_ratio,
-            seed=args.seed,
-            tail_classes=tail_classes,
-            copy=args.copy,
-        )
-    elif args.tail_type == "pareto":
+    #     if args.tail_level == "random":
+    #         tail_classes = None
+    #     elif args.tail_level == "easy":
+    #         tail_classes = STEP_TAIL_CLASSES_EASY[args.data_name]
+    #     elif args.tail_level == "hard":
+    #         tail_classes = STEP_TAIL_CLASSES_HARD[args.data_name]
+    #     else:
+    #         raise NotImplementedError()
 
-        if args.noise_on_tail:
-            target_dir += "_tailnoised"
-        target_dir += f"_seed{args.seed}"
+    #     make_data_step(
+    #         source_dir,
+    #         target_dir,
+    #         data_name=args.data_name,
+    #         noise_ratio=args.noise_ratio,
+    #         noise_on_tail=args.noise_on_tail,
+    #         tail_k=args.step_tail_k,
+    #         tail_class_ratio=args.step_tail_class_ratio,
+    #         seed=args.seed,
+    #         tail_classes=tail_classes,
+    #         copy=args.copy,
+    #     )
+    # elif args.tail_type == "pareto":
 
-        if args.tail_level == "random":
-            class_order = None
-        elif args.tail_level == "easy":
-            class_order = PARETO_CLASS_ORDER_EASY[args.data_name]
-        elif args.tail_level == "hard":
-            class_order = PARETO_CLASS_ORDER_HARD[args.data_name]
-        else:
-            raise NotImplementedError()
+    #     if args.noise_on_tail:
+    #         target_dir += "_tailnoised"
+    #     target_dir += f"_seed{args.seed}"
 
-        make_data_pareto(
-            source_dir,
-            target_dir,
-            data_name=args.data_name,
-            noise_ratio=args.noise_ratio,
-            noise_on_tail=args.noise_on_tail,
-            seed=args.seed,
-            class_order=class_order,
-            copy=args.copy,
-        )
-    else:
-        raise NotImplementedError()
+    #     if args.tail_level == "random":
+    #         class_order = None
+    #     elif args.tail_level == "easy":
+    #         class_order = PARETO_CLASS_ORDER_EASY[args.data_name]
+    #     elif args.tail_level == "hard":
+    #         class_order = PARETO_CLASS_ORDER_HARD[args.data_name]
+    #     else:
+    #         raise NotImplementedError()
 
-    print(f"target_dir: {target_dir}")
+    #     make_data_pareto(
+    #         source_dir,
+    #         target_dir,
+    #         data_name=args.data_name,
+    #         noise_ratio=args.noise_ratio,
+    #         noise_on_tail=args.noise_on_tail,
+    #         seed=args.seed,
+    #         class_order=class_order,
+    #         copy=args.copy,
+    #     )
+    # else:
+    #     raise NotImplementedError()
 
-    # verification
-    compare_directories(
-        source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
-    )
+    # print(f"target_dir: {target_dir}")
+
+    # # verification
+    # compare_directories(
+    #     source_dir, target_dir, is_file_to_exclude=is_in_mvtec_train_folder
+    # )
 
 
 if __name__ == "__main__":

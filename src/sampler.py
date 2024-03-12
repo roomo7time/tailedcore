@@ -557,7 +557,7 @@ class LOFSampler(BaseSampler):
 
             _features = features[:, p, :].cpu().numpy()
             clf.fit(_features)
-            _scores = torch.FloatTensor(-clf.negative_outlier_factor_)
+            _scores = torch.from_numpy(-clf.negative_outlier_factor_)
             scores[:, p] = _scores
 
         return scores.reshape((-1))
@@ -566,7 +566,7 @@ class LOFSampler(BaseSampler):
 
         clf = LocalOutlierFactor(n_neighbors=self.lof_k, metric="l2")
         clf.fit(features)
-        scores = torch.FloatTensor(-clf.negative_outlier_factor_)
+        scores = torch.from_numpy(-clf.negative_outlier_factor_)
 
         return scores
 

@@ -110,10 +110,13 @@ def plot_mvtec_score_masks(
     print(f"Plotting score masks at {save_dir_path}")
 
     def resize_and_crop(image, output_size=(224, 224)):
-        scale = 256.0 / min(image.shape[:2])
-        new_size = (int(np.round(image.shape[0] * scale)),
-                    int(np.round(image.shape[1] * scale)))
-        resized_image = zoom(image, (scale, scale, 1), order=1)
+        
+        new_size = (256, 256)
+        resized_image = cv2.resize(image, new_size, interpolation=cv2.INTER_LINEAR)
+
+        if len(image.shape) == 2:
+            resized_image = cv2.cvtColor(resized_image, cv2.COLOR_GRAY2RGB)
+
         margin_y = (resized_image.shape[0] - output_size[0]) // 2
         margin_x = (resized_image.shape[1] - output_size[1]) // 2
         cropped_image = resized_image[margin_y:margin_y + output_size[0], margin_x:margin_x + output_size[1]]
@@ -123,8 +126,6 @@ def plot_mvtec_score_masks(
         base_filename = "_".join(image_path.split("/")[-2:])
         base_filename_without_ext = os.path.splitext(base_filename)[0]
         image = plt.imread(image_path).astype(np.float32)
-        if image.max() > 1:  # Ensure the image is normalized
-            image /= 255.0
 
         processed_image = resize_and_crop(image)
 
