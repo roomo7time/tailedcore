@@ -105,7 +105,7 @@ def analyze_gap(args):
 
     class_sizes = torch.tensor([class_sizes_dict[label.item()] for label in labels], dtype=torch.long)
 
-    save_dir = os.path.join('.', args.data_name, args.config_name)
+    save_dir = os.path.join('.', 'logs', args.data_name, args.config_name)
 
     _evaluate_tail_class_detection(
         gaps=gaps,

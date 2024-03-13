@@ -12,6 +12,8 @@ config_ids=(
     08
     09
     10
+    11
+    12
 )
 
 for config_id in "${config_ids[@]}"; do
