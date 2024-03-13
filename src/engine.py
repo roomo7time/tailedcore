@@ -408,8 +408,6 @@ class AblationEngine:
 
         self.coreset_model: BaseCore = coreset_model
     
-    
-    
     def set_embedding_extractor(self, iter):
         save_dir = "/".join(self.save_dir_path.split("/")[:3])
         filename_pattern = os.path.join(save_dir, f"resnet18_iter_{iter:03d}_*.pt")
@@ -524,8 +522,8 @@ class AblationEngine:
             indices_tensor = torch.tensor(indices, dtype=torch.long)
             return indices_tensor
 
-
         return num_classes, names_to_ints
+    
     def calculate_accuracies(self, model, dataloader, device, names_to_ints):
         model.eval()  # Set the model to evaluation mode
         correct = 0

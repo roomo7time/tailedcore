@@ -32,11 +32,6 @@ from src.patch_maker import PatchMaker
 from src.sampler import LOFSampler, TailSampler, TailedLOFSampler, AdaptiveTailSampler
 
 
-
-
-
-
-
 def analyze_gap(args):
 
     utils.set_seed(args.config.seed)
@@ -78,86 +73,363 @@ def analyze_gap(args):
 
     embedding_extractor = ablation_engine.set_embedding_extractor(iter=config.model.embedding_extractor_iter)
     embedding_extractor.fc = nn.Identity()
+    embedding_extractor.eval()
 
     _, names_to_ints = ablation_engine._get_dataset_info()
 
     labels = [[]]*len(train_dataloader)
     gaps = [[]]*len(train_dataloader)
+    is_anomaly = [[]]*len(train_dataloader)
 
-    for data in train_dataloader:
+    for i, data in enumerate(train_dataloader):
 
         images = data["image"].to(device)
         label_names = data["classname"]
+        image_names = data["image_name"]
+        file_names = [os.path.splitext(os.path.basename(image_name))[0] for image_name in image_names]
+        _is_anomaly = torch.tensor([not filename.isnumeric() for filename in file_names], dtype=torch.bool)
         _labels = names_to_ints(label_names)
-        _gaps = embedding_extractor(images.to(device)).cpu()
+        with torch.no_grad():
+            _gaps = embedding_extractor(images.to(device)).cpu()
+
+        labels[i] = _labels
+        gaps[i] = _gaps
+        is_anomaly[i] = _is_anomaly
     
+    gaps = torch.cat(gaps, dim=0)
+    labels = torch.cat(labels, dim=0)
+    is_anomaly = torch.cat(is_anomaly, dim=0)
+
+    unique_labels, counts = labels.unique(return_counts=True)
+    class_sizes_dict = {label.item(): count.item() for label, count in zip(unique_labels, counts)}
+
+    class_sizes = torch.tensor([class_sizes_dict[label.item()] for label in labels], dtype=torch.long)
+
+    save_dir = os.path.join('.', args.data_name, args.config_name)
+
+    _evaluate_tail_class_detection(
+        gaps=gaps,
+        class_sizes_gt=class_sizes,
+        is_anomaly_gt=is_anomaly,
+        save_dir=save_dir,
+    )
+def _evaluate_tail_class_detection(
+    gaps: torch.Tensor,
+    class_sizes_gt: torch.Tensor,
+    is_anomaly_gt: torch.Tensor,
+    save_dir: str,
+):
+
+    method_names = [
+        "acs-trim_min-mode",
+    ]
+
+    results = []
+    for method_name in method_names:
+        _result = _get_result_tail_class_detection(
+            method_name=method_name,
+            class_sizes_gt=class_sizes_gt,
+            is_anomaly_gt=is_anomaly_gt,
+            gaps=gaps,
+        )
+        results.append(_result)
+
+    df = utils.save_dicts_to_csv(
+        results, filename=os.path.join(save_dir, "result_gap.csv")
+    )
+
+    utils.print_df(df)
+
+    return df
 
 
+def _get_result_tail_class_detection(
+    method_name,
+    class_sizes_gt,
+    is_anomaly_gt,
+    gaps: torch.Tensor,
+):
 
+    if "acs" in method_name:
+        self_sim = class_size.compute_self_sim(gaps)
+        method_parts = method_name.split("-")
+        th_type = method_parts[1]
+        vote_type = method_parts[2]
+        tail_sampler = AdaptiveTailSampler(th_type=th_type, vote_type=vote_type)
+        _, tail_indices, class_sizes_pred = tail_sampler.run(
+            gaps, return_class_sizes=True
+        )
+        
+        num_samples_per_class = class_size.predict_num_samples_per_class(class_sizes_pred)
+        max_K = class_size.predict_max_K(num_samples_per_class)
 
+        is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+    elif "scs" in method_name:
+        method_parts = method_name.split("_")
+        th_type = method_parts[1]
+        tail_sampler = TailSampler(th_type=th_type, vote_type="mean")
+        _, tail_indices, class_sizes_pred = tail_sampler.run(
+            gaps, return_class_sizes=True
+        )
+        
+        # TODO: observer
+        num_samples_per_class = class_size.predict_num_samples_per_class(class_sizes_pred)
+        max_K = class_size.predict_max_K(num_samples_per_class)
 
-
-
-    return 
-
-    # masks = extracted["masks"]
-    labels = extracted["labels"]
-
-    gaps = extracted["gaps"]
-    class_names = extracted["class_names"]
-    class_sizes = extracted["class_sizes"]
-
-    num_samples_per_class = dict(Counter(class_names))
-
-    save_log_dir = os.path.join("./logs", f"{data_name}_{config_name}")
-
-    save_data_info_path = os.path.join(save_log_dir, "num_samples_per_class.csv")
-    utils.save_dicts_to_csv([num_samples_per_class], save_data_info_path)
-
-    num_classes = len(set(class_names))
-    save_plot_dir = os.path.join("./artifacts", data_name, config_name)
-    print(f"save_plot_dir: {save_plot_dir}")
-    plot_gap_analysis(gaps, labels, class_names, class_sizes, save_plot_dir)
-
-
-
-
-def get_relation_matrix(class_labels):
-    # Convert class_labels to a numpy array if it isn't already one
-    class_labels = np.array(class_labels)
-    # Reshape class_labels to enable broadcasting, (n, 1) and (1, n)
-    labels_row = class_labels.reshape(-1, 1)
-    labels_col = class_labels.reshape(1, -1)
-    # Use broadcasting to compare every label with every other label efficiently
-    relationship_matrix = (labels_row == labels_col).astype(int)
+        is_tail_pred = convert_indices_to_bool(len(gaps), tail_indices)
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+    elif method_name == "lof":
+        lof_sampler = LOFSampler()
+        _, head_indices, tail_scores = lof_sampler.run(gaps, return_outlier_scores=True)
+        is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
+        is_tail_pred = 1 - is_head_pred
+        class_sizes_pred = torch.zeros((len(gaps)))
+    elif method_name == "lof_norm":
+        gaps = F.normalize(gaps, dim=-1)
+        lof_sampler = LOFSampler()
+        _, head_indices, tail_scores = lof_sampler.run(gaps, return_outlier_scores=True)
+        is_head_pred = convert_indices_to_bool(len(gaps), head_indices)
+        is_tail_pred = 1 - is_head_pred
+        class_sizes_pred = torch.zeros((len(gaps)))
     
-    return relationship_matrix
+    elif method_name == "if":
+        from sklearn.ensemble import IsolationForest
+        
+        clf = IsolationForest(random_state=0)
+        X = gaps.numpy()
+        clf.fit(X)
+        tail_scores = -torch.from_numpy(clf.decision_function(X)).float()
+        is_tail_pred = torch.from_numpy(clf.predict(X) == -1).long()
+        class_sizes_pred = torch.zeros_like(tail_scores)
 
+    elif method_name == "if_norm":
+        from sklearn.ensemble import IsolationForest
+        gaps = F.normalize(gaps, dim=-1)
+        clf = IsolationForest(random_state=0)
+        X = gaps.numpy()
+        clf.fit(X)
+        tail_scores = -torch.from_numpy(clf.decision_function(X)).float()
+        is_tail_pred = torch.from_numpy(clf.predict(X) == -1).long()
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    elif method_name == "ocsvm":
+        from sklearn.svm import OneClassSVM
 
-def _plot_histograms_pmf(scores_same, scores_diff, filename):
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
+        X = gaps.numpy()
+        ocsvm = OneClassSVM(gamma="auto").fit(X)
+        tail_scores = -torch.from_numpy(ocsvm.decision_function(X)).float()
+        is_tail_pred = torch.from_numpy(ocsvm.predict(X) == -1).long()
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    elif method_name == "ocsvm_norm":
+        from sklearn.svm import OneClassSVM
+        gaps = F.normalize(gaps, dim=-1)
+        X = gaps.numpy()
+        ocsvm = OneClassSVM(gamma="auto").fit(X)
+        tail_scores = -torch.from_numpy(ocsvm.decision_function(X)).float()
+        is_tail_pred = torch.from_numpy(ocsvm.predict(X) == -1).long()
+        class_sizes_pred = torch.zeros_like(tail_scores)
+
+    elif method_name == "dbscan":
+        from sklearn.cluster import DBSCAN
+
+        X = gaps.numpy()
+        dbscan = DBSCAN().fit(X)
+        labels = dbscan.labels_
+        is_tail_pred = torch.from_numpy(labels == -1).long()
+        tail_scores = is_tail_pred.float()
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
+    elif method_name == "dbscan_norm":
+        from sklearn.cluster import DBSCAN
+        gaps = F.normalize(gaps, dim=-1)
+        X = gaps.numpy()
+        dbscan = DBSCAN().fit(X)
+        labels = dbscan.labels_
+        is_tail_pred = torch.from_numpy(labels == -1).long()
+        tail_scores = is_tail_pred.float()
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
     
-    # Compute Wasserstein distance between the two distributions
-    w_dist = wasserstein_distance(scores_same, 1 - scores_diff)
+    elif method_name == "dbscan_elbow":
+        from sklearn.cluster import DBSCAN
+
+        X = gaps.numpy()
+        dbscan = DBSCAN(min_samples=1).fit(X)
+        labels = dbscan.labels_
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "dbscan_elbow_norm":
+        from sklearn.cluster import DBSCAN
+
+        X = gaps.numpy()
+        dbscan = DBSCAN(min_samples=1).fit(X)
+        labels = dbscan.labels_
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.FloatTensor(
+            np.array([cluster_counts[label] for label in labels])
+        )
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "kmeans":
+        from sklearn.cluster import KMeans
+
+        X = gaps.numpy()
+        kmeans = KMeans(n_clusters=3, random_state=0).fit(
+            X
+        )  # Adjust 'n_clusters' as needed
+        labels = kmeans.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred, percentile=1)
+    elif method_name == "kmeans_norm":
+        from sklearn.cluster import KMeans
+
+        X = gaps.numpy()
+        kmeans = KMeans(n_clusters=3, random_state=0).fit(
+            X
+        )  # Adjust 'n_clusters' as needed
+        labels = kmeans.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred, percentile=1)
+    elif method_name == "gmm":
+        from sklearn.mixture import GaussianMixture
+
+        X = gaps.numpy()
+        gmm = GaussianMixture().fit(X)
+        labels = gmm.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred, percentile=1)
+    elif method_name == "gmm_norm":
+        from sklearn.mixture import GaussianMixture
+        gaps = F.normalize(gaps, dim=-1)
+        X = gaps.numpy()
+        gmm = GaussianMixture().fit(X)
+        labels = gmm.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred, percentile=1)
+    elif method_name == "kde":
+        from sklearn.neighbors import KernelDensity
+        X = gaps.numpy()
+        kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(X)
+        log_densities = kde.score_samples(X)
+        log_densities = torch.from_numpy(log_densities).float()
+        tail_scores = -log_densities
+        class_sizes_pred = torch.zeros_like(tail_scores)
+        is_tail_pred = (log_densities < class_size.elbow(log_densities, quantize=True)).long()
     
-    # Plot first score array with specified colors and outline
-    plt.hist(scores_same, bins='auto', density=True, alpha=0.65, color='orange', label='Same class')
-    # Plot second score array with specified colors and outline
-    plt.hist(scores_diff, bins='auto', density=True, alpha=0.65, color='cornflowerblue', label='Different classes')
-    
-    plt.axvline(x=0.5, color='red', linestyle='--', linewidth=2)
-    
-    plt.ylabel('Probability mass', size=18)
-    plt.xlabel('Normalized arccos of similarity', size=18)
-    plt.title(f'Wasserstein Distance: {w_dist:.2f}', size=18)
-    plt.legend(fontsize=18, loc="upper left")
-    plt.tight_layout()
-    plt.savefig(filename, bbox_inches="tight", dpi=300)  # Save the figure to the specified file
-    plt.close()  # Close the figure to prevent it from displaying in an interactive environment
+    elif method_name == "kde_norm":
+        from sklearn.neighbors import KernelDensity
+        gaps = F.normalize(gaps, dim=-1)
+        X = gaps.numpy()
+        kde = KernelDensity(kernel="gaussian", bandwidth=0.5).fit(X)
+        log_densities = kde.score_samples(X)
+        log_densities = torch.from_numpy(log_densities).float()
+        tail_scores = -log_densities
+        class_sizes_pred = torch.zeros_like(tail_scores)
+        is_tail_pred = (log_densities < class_size.elbow(log_densities, quantize=True)).long()
 
+    elif method_name == "affprop":  # affinity propagation
+        from sklearn.cluster import AffinityPropagation
 
+        X = gaps.numpy()
+        affinity_propagation = AffinityPropagation(random_state=0).fit(X)
+        labels = affinity_propagation.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "affprop_norm":  # affinity propagation
+        from sklearn.cluster import AffinityPropagation
+        gaps = F.normalize(gaps, dim=-1)
+        X = gaps.numpy()
+        affinity_propagation = AffinityPropagation(random_state=0).fit(X)
+        labels = affinity_propagation.predict(X)
+        cluster_counts = Counter(labels)
+        class_sizes_pred = torch.from_numpy(
+            np.array([cluster_counts[label] for label in labels])
+        ).float()
+        tail_scores = 1 - class_sizes_pred / class_sizes_pred.max()
+        is_tail_pred = class_size.predict_few_shot_class_samples(class_sizes_pred)
+    elif method_name == "knnod":
+        from pyod.models.knn import KNN
+        X = gaps.numpy()
+        knn = KNN()
+        knn.fit(X)
+        is_tail_pred = torch.from_numpy(knn.labels_)  # binary labels (0: inliers, 1: outliers)
+        tail_scores = torch.from_numpy(knn.decision_scores_)  # raw outlier scores
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    elif method_name == "knnod_norm":
+        from pyod.models.knn import KNN
+        gaps = F.normalize(gaps, dim=-1)
+        X = gaps.numpy()
+        knn = KNN()
+        knn.fit(X)
+        is_tail_pred = torch.from_numpy(knn.labels_)  # binary labels (0: inliers, 1: outliers)
+        tail_scores = torch.from_numpy(knn.decision_scores_)  # raw outlier scores
+        class_sizes_pred = torch.zeros_like(tail_scores)
+    else:
+        raise NotImplementedError()
 
+    is_tail_gt = (class_sizes_gt <= 20).to(torch.long)
 
+    is_missing_tail = (is_tail_pred - is_tail_gt) < 0
+    is_included_anomaly = (is_tail_pred + is_anomaly_gt) > 1
+    is_included_head = (is_tail_pred - is_tail_gt) > 0
+
+    ratio_missing_tail = is_missing_tail.sum().item() / is_tail_gt.sum().item()
+    ratio_included_anomaly = (
+        is_included_anomaly.sum().item() / is_anomaly_gt.sum().item()
+    )
+    ratio_included_head = is_included_head.sum().item() / max(
+        is_tail_pred.sum().item(), 1
+    )
+
+    class_size_pred_error = round(
+        (abs(class_sizes_pred - class_sizes_gt) * (1 / class_sizes_gt)).mean().item(), 2
+    )
+    tail_pred_acc = 1 - abs(is_tail_gt - is_tail_pred).to(torch.float).mean().item()
+
+    precision, recall, thresholds = metrics.precision_recall_curve(is_tail_gt, tail_scores)
+    auprc = metrics.auc(recall, precision)
+
+    return {
+        "method": method_name,
+        "ratio_missing_tail": ratio_missing_tail * 100,
+        "ratio_included_anomaly": ratio_included_anomaly * 100,
+        "ratio_included_head": ratio_included_head * 100,
+        "auprc": auprc * 100,
+        "class_size_pred_error": class_size_pred_error,
+        "auroc": metrics.roc_auc_score(is_tail_gt, tail_scores) * 100,
+        "tail_pred_acc": tail_pred_acc * 100,
+        "tail_pred_mcc": metrics.matthews_corrcoef(is_tail_gt, is_tail_pred),
+        "tail_pred_precision": metrics.precision_score(is_tail_gt, is_tail_pred),
+        "tail_pred_recall": metrics.recall_score(is_tail_gt, is_tail_pred),
+    }
 
 def _convert_class_names_to_labels(class_names):
     label_map = {}
@@ -179,151 +451,6 @@ def convert_indices_to_bool(n: int, indices: torch.Tensor) -> torch.Tensor:
     bool_array = torch.zeros((n), dtype=torch.long)
     bool_array[indices] = 1
     return bool_array
-
-
-
-
-
-
-def plot_gap_analysis(
-    gaps, labels, class_names, class_sizes, save_dir
-):
-
-    if gaps.ndim == 4:
-        gaps = gaps[:, :, 0, 0]
-
-    class_labels, class_label_names = _convert_class_names_to_labels(class_names)
-    class_labels = class_labels.numpy()
-
-    is_anomaly_gt = labels
-
-    _anomaly_labels = is_anomaly_gt.to(torch.bool).tolist()
-    _few_shot_labels = (class_sizes < 20).tolist()
-    save_plot_dir = os.path.join(save_dir, "plot_gap")
-
-    self_sim = class_size.compute_self_sim(gaps).numpy()
-    relation_matrix = get_relation_matrix(class_labels)
-    
-    angles_same = []
-    angles_diff = []
-
-    for i in range(len(self_sim)):
-        _sims = np.clip(self_sim[i], -1, 1)
-        _angles = np.arccos(_sims)
-        _rel_labels = np.array(relation_matrix[i], dtype=np.bool_)
-        _max_angle = _angles.max()
-        _angles_same = _angles[_rel_labels] / _max_angle
-        _angles_diff = _angles[~_rel_labels] / _max_angle
-
-        angles_same += _angles_same.tolist()
-        angles_diff += _angles_diff.tolist()
-    angles_same = np.array(angles_same)
-    angles_diff = np.array(angles_diff)
-        
-    _plot_histograms_pmf(angles_same, angles_diff, filename=os.path.join(save_dir, f"hist_{save_dir.split('/')[2]}.pdf"))
-
-
-import pandas as pd
-from typing import List
-
-
-import pandas as pd
-import numpy as np
-from typing import List
-
-
-def average_dfs(dfs: List[pd.DataFrame]) -> pd.DataFrame:
-    combined_df = pd.concat(dfs)
-
-    # Identify numeric columns
-    numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
-
-    # Compute the mean and std only for numeric columns
-    avg_numeric_df = combined_df[numeric_cols].groupby(combined_df.index).mean()
-    std_numeric_df = combined_df[numeric_cols].groupby(combined_df.index).std()
-
-    # Rename columns in std_numeric_df to indicate they are standard deviations
-    std_numeric_df = std_numeric_df.add_suffix("_std")
-
-    # Extract non-numeric columns from the first dataframe in the list
-    non_numeric_df = dfs[0][combined_df.select_dtypes(exclude=[np.number]).columns]
-
-    # Concatenate non-numeric, average, and std dataframes
-    avg_df = pd.concat([non_numeric_df, avg_numeric_df, std_numeric_df], axis=1)
-
-    return avg_df
-
-
-def analyze(data="mvtec_all", config_name="extract_mvtec_01", type="gap", seeds: list=list(range(101,106))):
-
-    data_names = get_data_names(data, seeds=seeds,)
-
-
-    dfs = []
-
-    for data_name in data_names:
-        print(f"config: {config_name} data: {data_name}")
-        extracted_path = f"./artifacts/{data_name}_mvtec-multiclass/{config_name}/extracted_train_all.pt"
-        
-        if type == "gap":
-            _df = analyze_gap(
-                extracted_path=extracted_path,
-                data_name=data_name,
-                config_name=config_name,
-            )
-        # elif type == "patch":
-        #     _df = analyze_patch(
-        #         extracted_path=extracted_path,
-        #         data_name=data_name,
-        #         config_name=config_name,
-        #     )
-        else:
-            raise NotImplementedError()
-
-
-def get_data_names(data: str, seeds: list):
-
-    mvtec_data_base_names = [
-        "mvtec_step_random_nr10_tk1_tr60",
-        "mvtec_step_random_nr10_tk4_tr60",
-        "mvtec_pareto_random_nr10",
-    ]
-
-    visa_data_base_names = [
-        "visa_step_random_nr05_tk1_tr60",
-        "visa_step_random_nr05_tk4_tr60",
-        "visa_pareto_random_nr05",
-    ]
-
-    if data == "mvtec_all":
-        data_base_names = mvtec_data_base_names
-    elif data == "mvtec_step_tk1":
-        data_base_names = [mvtec_data_base_names[0]]
-    elif data == "mvtec_step_tk4":
-        data_base_names = [mvtec_data_base_names[1]]
-    elif data == "mvtec_pareto":
-        data_base_names = [mvtec_data_base_names[2]]
-    elif data == "visa_all":
-        data_base_names = visa_data_base_names
-    elif data == "visa_step_tk1":
-        data_base_names = [visa_data_base_names[0]]
-    elif data == "visa_step_tk4":
-        data_base_names = [visa_data_base_names[1]]
-    elif data == "visa_pareto":
-        data_base_names = [visa_data_base_names[2]]
-    elif data == "all":
-        data_base_names = mvtec_data_base_names + visa_data_base_names
-    else:
-        raise NotImplementedError()
-
-    data_names = [
-        f"{data_base_name}_seed{seed}"
-        for data_base_name in data_base_names
-        for seed in seeds
-    ]
-    
-    return data_names
-
 
 # mvtec:
 if __name__ == "__main__":

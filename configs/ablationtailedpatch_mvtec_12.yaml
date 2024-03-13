@@ -10,7 +10,7 @@ model:
   backbone_names: ["wideresnet50"]
   layers_to_extract: ["layer2", "layer3"]
   embedding_to_extract_from: "avgpool"
-  embedding_extractor_iter: 20
+  embedding_extractor_iter: 100
 
   coreset_model_name: "ablationtailedpatch"
   tail_th_type: "ada_trim_min-mode"
