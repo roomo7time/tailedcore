@@ -2,6 +2,7 @@
 #!/bin/bash
 
 config_ids=(
+    13
     01
     02
     03

@@ -389,6 +389,7 @@ class AblationEngine:
 
         embedding_extractor = self.set_embedding_extractor(iter=self.config.model.embedding_extractor_iter)
         embedding_extractor.fc = nn.Identity()
+        embedding_extractor.eval()
 
         from .coreset_model import AblationTailedPatch
         coreset_model = AblationTailedPatch(
@@ -402,6 +403,9 @@ class AblationEngine:
             sampler_on_gpu=self.sampler_on_gpu,
             save_dir_path=self.save_dir_path,
             brute=True,
+            tail_th_type=self.config.model.tail_th_type,
+            tail_data_augment_type=self.config.model.tail_data_augment_type,
+            tail_lof=self.config.model.tail_lof,
         )
 
         coreset_model.fit(self.train_dataloader)

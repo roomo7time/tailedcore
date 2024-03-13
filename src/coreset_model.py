@@ -272,7 +272,7 @@ class AATailedPatch(BaseCore):
         anomaly_score_num_nn=1,
         save_dir_path=None,
         brute=True,
-        tail_th_type: str = 'symmin',   # symmin, indep
+        tail_th_type: str = 'ada_trim_min-mode',   # symmin, indep
         tail_data_augment_type: str = 'rot15flip',  # None, 'rot15flip', 'rot30flip'
         tail_lof: bool = False,
     ):
@@ -800,7 +800,7 @@ class AblationTailedPatch(BaseCore):
         anomaly_score_num_nn=1,
         save_dir_path=None,
         brute=True,
-        tail_th_type: str = 'symmin',   # symmin, indep
+        tail_th_type: str = 'ada_trim_min-mode',   # symmin, indep
         tail_data_augment_type: str = 'rot15flip',  # None, 'rot15flip', 'rot30flip'
         tail_lof: bool = False,
     ):

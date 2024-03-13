@@ -26,7 +26,7 @@ def parse_args():
         # default="visa_pareto_random_nr05_seed207",
     )
     parser.add_argument("--data_format", type=str, default="mvtec-multiclass")
-    parser.add_argument("--config_name", type=str, default="ablationtailedpatch_mvtec_02")
+    parser.add_argument("--config_name", type=str, default="ablationtailedpatch_mvtec_13")
     # parser.add_argument("--config_name", type=str, default="extract_mvtec_01")
 
     # # toy setting
@@ -67,7 +67,7 @@ def parse_args():
     # parser.add_argument("--data_format", type=str, default="labelme")
     # parser.add_argument("--config_name", type=str, default="patchcore_RF10_08")
 
-    parser.add_argument("--gpu", type=int, default=[0])
+    parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--faiss_on_gpu", type=bool, default=True)
     parser.add_argument("--faiss_num_workers", type=int, default=0)

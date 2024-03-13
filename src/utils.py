@@ -175,16 +175,28 @@ def create_storage_folder(
     return save_path
 
 
-def set_torch_device(gpu_ids):
+# def set_torch_device(gpu_ids):
+#     """Returns correct torch.device.
+
+#     Args:
+#         gpu_ids: [list] list of gpu ids. If empty, cpu is used.
+#     """
+#     if len(gpu_ids) > 0:
+#         # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+#         # os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_ids[0])
+#         return torch.device("cuda:{}".format(gpu_ids[0]))
+#     return torch.device("cpu")
+
+def set_torch_device(gpu_id):
     """Returns correct torch.device.
 
     Args:
         gpu_ids: [list] list of gpu ids. If empty, cpu is used.
     """
-    if len(gpu_ids) > 0:
+    if gpu_id is not None:
         # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         # os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_ids[0])
-        return torch.device("cuda:{}".format(gpu_ids[0]))
+        return torch.device(f"cuda:{gpu_id}")
     return torch.device("cpu")
 
 
@@ -394,7 +406,7 @@ def get_folder_names(folder_root_path):
 
     # Check if the provided path is indeed a directory
     if not os.path.isdir(folder_root_path):
-        raise ValueError("The provided path is not a directory.")
+        raise ValueError(f"The provided path is not a directory: {folder_root_path}")
 
     # Iterate over the entries in the given directory
     for entry in os.listdir(folder_root_path):
