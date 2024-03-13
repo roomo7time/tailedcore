@@ -99,12 +99,12 @@ def save_result(
     #     score_masks=score_masks,
     #     image_scores=image_scores,
     # )
-    utils.plot_mvtec_score_masks(
-        save_dir_path=os.path.join(save_plot_dir, "scores"),
-        image_paths=image_paths,
-        masks_gt=masks_gt,
-        score_masks=score_masks,
-    )
+    # utils.plot_mvtec_score_masks(
+    #     save_dir_path=os.path.join(save_plot_dir, "scores"),
+    #     image_paths=image_paths,
+    #     masks_gt=masks_gt,
+    #     score_masks=score_masks,
+    # )
 
     try:
         print("Computing image auroc...")
