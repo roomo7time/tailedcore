@@ -2,6 +2,7 @@
 #!/bin/bash
 
 config_ids=(
+    13
     01
     02
     03
@@ -18,7 +19,7 @@ config_ids=(
 
 for config_id in "${config_ids[@]}"; do
     python ablation_embedding_sampling.py \
-        --data_sub_path "mvtec_step_random_nr10_tk4_tr60_seed101" \
+        --data_sub_path "visa_step_random_nr05_tk4_tr60_seed101" \
         --config_name "ablationtailedpatch_mvtec_${config_id}"
 done
 
