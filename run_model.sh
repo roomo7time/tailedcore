@@ -36,15 +36,15 @@ for nr in "${noise_ratios[@]}"; do
             --config_name "patchcore_mvtec_01" \
             --gpu 0
 
-        python evaluate.py \
-            --data_sub_path "mvtec_step_random_nr${nr}_tk1_tr60_seed${seed}" \
-            --config_name "patchcore_mvtec_01" \
-            --gpu 0
+        # python evaluate.py \
+        #     --data_sub_path "mvtec_step_random_nr${nr}_tk1_tr60_seed${seed}" \
+        #     --config_name "patchcore_mvtec_01" \
+        #     --gpu 0
 
-        python evaluate.py \
-            --data_sub_path "mvtec_pareto_random_nr${nr}_seed${seed}" \
-            --config_name "patchcore_mvtec_01" \
-            --gpu 1
+        # python evaluate.py \
+        #     --data_sub_path "mvtec_pareto_random_nr${nr}_seed${seed}" \
+        #     --config_name "patchcore_mvtec_01" \
+        #     --gpu 1
     done
 done
 

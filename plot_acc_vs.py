@@ -20,7 +20,7 @@ for y_col_idx in [5,6,7,8,10,11]:
         y_col_name = df.columns[y_col_idx]  # This gets the second column name for the y-axis label
         label_name = df.iloc[0, label_col_idx]  # Assuming the label you want is in the first row of the specified column
         # sns.lineplot(data=df, x=x_col_name, y=y_col_name, marker='o', linestyle='-', color=palette[i], markersize=8, label=label_name)
-        sns.lineplot(data=df, x=x_col_name, y=y_col_name, marker='o', linestyle='-', color=palette[i], markersize=8)
+        sns.lineplot(data=df, x=x_col_name, y=y_col_name,  color=palette[i], marker='o', linestyle='-', markersize=8)
 
     plt.xlabel(x_col_name, size=16)  # Set the X axis label to the column name
     plt.ylabel(y_col_name, size=16)  # Set the Y axis label to the column name
