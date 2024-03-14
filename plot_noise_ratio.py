@@ -3,7 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Load data from CSV
-data = pd.read_csv('./logs/tailedpatch_result_summary - noise_ratio.csv')
+data = pd.read_csv('./logs_plot/tailedpatch_result_summary - noise_ratio.csv')
 
 # Define column names as variables
 tail_type_col = 'Tail type'
