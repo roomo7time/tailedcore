@@ -149,6 +149,9 @@ def plot_mvtec_score_masks(
         overlay_gt_image = np.clip(overlay_gt_image, 0, 1)
 
         # Save the overlay images
+        # processed_image_savename = os.path.join(save_dir_path, base_filename_without_ext + "_image.jpg")
+        # plt.imsave(processed_image_savename, processed_image)
+
         overlay_score_mask_savename = os.path.join(save_dir_path, base_filename_without_ext + "_score_overlay.jpg")
         plt.imsave(overlay_score_mask_savename, overlay_image)
 
